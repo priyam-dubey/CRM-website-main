@@ -1,0 +1,27 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+  html { font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  body { background-color: #F8FAFC; color: #0F172A; margin: 0; }
+  :focus-visible { outline: 2px solid #2563EB; outline-offset: 2px; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
+}
+
+@layer components {
+  .skeleton { @apply relative overflow-hidden bg-slate-100 rounded; }
+  .skeleton::after {
+    content: '';
+    position: absolute; top: 0; right: 0; bottom: 0; left: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.6) 50%, transparent 100%);
+    animation: shimmer 1.5s infinite;
+  }
+}
+
+@keyframes shimmer { 100% { transform: translateX(100%); } }
