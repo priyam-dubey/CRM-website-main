@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "BookingCRM NestJS Backend",
   "scripts": {
-    "build": "nest build",
+    "build": "npx nest build",
     "start": "node dist/main",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
@@ -67,6 +67,9 @@
     "ts-node": "^10.0.0",
     "typescript": "^5.0.0",
     "typescript-eslint": "^8.0.0"
+  },
+  "engines": {
+    "node": "20.x"
   },
   "jest": {
     "moduleFileExtensions": [
