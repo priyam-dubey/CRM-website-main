@@ -1,0 +1,633 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  OPERATOR
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  TICKETED
+  CANCELLED
+  REFUNDED
+  CHARGEBACK
+}
+
+enum RevenueType {
+  FARE
+  TAX
+  FEE
+  MCO
+  CHARGEBACK
+  REFUND
+  ADJUSTMENT
+}
+
+enum ChargebackStatus {
+  OPEN
+  UNDER_REVIEW
+  WON
+  LOST
+}
+
+enum RefundStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PROCESSED
+}
+
+enum ActivityAction {
+  CREATE
+  UPDATE
+  DELETE
+  VIEW
+  EXPORT
+  LOGIN
+  LOGOUT
+  FAILED_LOGIN
+  PASSWORD_RESET
+}
+
+enum SecurityEvent {
+  LOGIN
+  LOGOUT
+  FAILED_LOGIN
+  IP_BLOCKED
+  SESSION_REVOKED
+  PASSWORD_CHANGED
+}
+
+enum NotificationSeverity {
+  INFO
+  SUCCESS
+  WARNING
+  ERROR
+}
+
+enum IPRuleType {
+  ALLOW
+  DENY
+}
+
+// ─── Booking transaction foundation (hybrid architecture) ──────────────────
+// Booking remains the primary aggregate. Every booking currently has exactly
+// one BookingTransaction (created automatically alongside the booking), but
+// the model is shaped so a booking can later accumulate more (an exchange,
+// a reissuance, etc.) without another breaking migration. See IMPLEMENTATION.md
+// "Booking transaction architecture" for the full rationale.
+enum TransactionType {
+  NEW_BOOKING
+  CANCEL_FOR_REFUND
+  CANCEL_FOR_FUTURE_CREDIT
+  EXCHANGE
+  UPGRADE
+  BAGGAGE_ADDON
+  EXTRA_ADDON
+  SEAT_ASSIGNMENT
+  TICKET_REISSUANCE
+}
+
+enum TransactionStatus {
+  DRAFT
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model Company {
+  id        String    @id @default(uuid())
+  name      String    @db.VarChar(255)
+  slug      String    @unique @db.VarChar(100)
+  isActive  Boolean   @default(true)
+  ipRestrictionEnabled Boolean @default(false)
+  metadata  Json?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  users          User[]
+  bookings       Booking[]
+  revenue        Revenue[]
+  activityLogs   ActivityLog[]
+  securityLogs   SecurityLog[]
+  notifications  Notification[]
+  ipRules        IPRule[]
+  airlines       Airline[]
+  bookingClasses BookingClass[]
+  providers      Provider[]
+  cardProcessors CardProcessor[]
+  callQueues     CallQueue[]
+  savedViews     SavedView[]
+  sessions       Session[]
+  quickNotes     QuickNote[]
+
+  @@index([isActive])
+  @@map("companies")
+}
+
+model User {
+  id           String    @id @default(uuid())
+  companyId    String
+  email        String    @db.VarChar(320)
+  passwordHash String    @db.VarChar(100)
+  firstName    String    @db.VarChar(100)
+  lastName     String    @db.VarChar(100)
+  role         UserRole  @default(OPERATOR)
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  version      Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  company          Company        @relation(fields: [companyId], references: [id])
+  sessions         Session[]
+  createdBookings  Booking[]      @relation("BookingCreatedBy")
+  assignedBookings Booking[]      @relation("BookingAssignedTo")
+  activityLogs     ActivityLog[]
+  notifications    Notification[]
+  createdRevenue   Revenue[]
+  savedViews       SavedView[]
+  bookingNotes     BookingNote[]
+  createdTransactions BookingTransaction[]
+  quickNotes       QuickNote[]
+
+  @@unique([email, companyId])
+  @@index([companyId])
+  @@index([companyId, role])
+  @@index([companyId, isActive])
+  @@index([email])
+  @@map("users")
+}
+
+model Session {
+  id               String    @id @default(uuid())
+  userId           String
+  companyId        String
+  refreshTokenHash String    @unique @db.VarChar(100)
+  ipAddress        String    @db.VarChar(45)
+  userAgent        String?   @db.VarChar(500)
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+
+  user    User    @relation(fields: [userId], references: [id])
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@index([userId])
+  @@index([companyId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model Booking {
+  id              String        @id @default(uuid())
+  companyId       String
+  reference       String        @db.VarChar(30)
+  pnr             String        @db.VarChar(20)
+  passengerName   String        @db.VarChar(200)
+  passengerEmail  String?       @db.VarChar(320)
+  passengerPhone  String?       @db.VarChar(30)
+  status          BookingStatus @default(PENDING)
+  airlineId       String
+  classId         String
+  providerId      String
+  cardProcessorId String
+  currencyId      String
+  callQueueId     String?
+  assignedToId    String?
+  createdById     String
+  grossAmount     Int
+  netAmount       Int
+  travelDate      DateTime
+  returnDate      DateTime?
+  notes           String?       @db.Text
+  isUrgent        Boolean       @default(false)
+  version         Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  deletedAt       DateTime?
+
+  company       Company       @relation(fields: [companyId], references: [id])
+  airline       Airline       @relation(fields: [airlineId], references: [id])
+  class         BookingClass  @relation(fields: [classId], references: [id])
+  provider      Provider      @relation(fields: [providerId], references: [id])
+  cardProcessor CardProcessor @relation(fields: [cardProcessorId], references: [id])
+  currency      Currency      @relation(fields: [currencyId], references: [id])
+  callQueue     CallQueue?    @relation(fields: [callQueueId], references: [id])
+  assignedTo    User?         @relation("BookingAssignedTo", fields: [assignedToId], references: [id])
+  createdBy     User          @relation("BookingCreatedBy", fields: [createdById], references: [id])
+  revenue       Revenue[]
+  mco           MCO?
+  bookingNotes  BookingNote[]
+  chargebacks   Chargeback[]
+  refunds       Refund[]
+  transactions  BookingTransaction[]
+
+  @@unique([reference, companyId])
+  @@index([companyId])
+  @@index([companyId, status])
+  @@index([companyId, createdAt(sort: Desc)])
+  @@index([companyId, travelDate])
+  @@index([companyId, assignedToId])
+  @@index([companyId, airlineId])
+  @@index([companyId, isUrgent])
+  @@map("bookings")
+}
+
+// BookingTransaction: the first step of the hybrid architecture described in
+// IMPLEMENTATION.md. A Booking currently has exactly one BookingTransaction,
+// created automatically when the booking is created (type = NEW_BOOKING).
+// The model already supports many transactions per booking so a later
+// "Create Revision" action can append TRANSACTION #2, #3, etc. without a
+// further schema change — deferred deliberately, per the "current phase"
+// scope, rather than implemented now.
+model BookingTransaction {
+  id                String            @id @default(uuid())
+  bookingId         String
+  transactionNumber Int
+  transactionType   TransactionType
+  status            TransactionStatus @default(COMPLETED)
+  remarks           String?           @db.VarChar(1000)
+  metadata          Json?
+  createdById       String
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  deletedAt         DateTime?
+
+  booking   Booking @relation(fields: [bookingId], references: [id])
+  createdBy User    @relation(fields: [createdById], references: [id])
+
+  @@unique([bookingId, transactionNumber])
+  @@index([bookingId])
+  @@index([transactionType])
+  @@map("booking_transactions")
+}
+
+model Revenue {
+  id          String      @id @default(uuid())
+  companyId   String
+  bookingId   String
+  currencyId  String
+  type        RevenueType
+  grossAmount Int
+  netAmount   Int
+  description String?     @db.VarChar(500)
+  entryDate   DateTime    @default(now())
+  createdById String
+  version     Int         @default(0)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  deletedAt   DateTime?
+
+  company   Company  @relation(fields: [companyId], references: [id])
+  booking   Booking  @relation(fields: [bookingId], references: [id])
+  currency  Currency @relation(fields: [currencyId], references: [id])
+  createdBy User     @relation(fields: [createdById], references: [id])
+
+  @@index([companyId])
+  @@index([companyId, entryDate])
+  @@index([bookingId])
+  @@index([companyId, type])
+  @@map("revenue")
+}
+
+model MCO {
+  id          String    @id @default(uuid())
+  companyId   String
+  bookingId   String    @unique
+  airlineId   String
+  mcoNumber   String    @db.VarChar(50)
+  amount      Int
+  currencyId  String
+  reason      String?   @db.VarChar(500)
+  issuedAt    DateTime
+  createdById String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  booking  Booking  @relation(fields: [bookingId], references: [id])
+  airline  Airline  @relation(fields: [airlineId], references: [id])
+  currency Currency @relation(fields: [currencyId], references: [id])
+
+  @@index([companyId])
+  @@map("mcos")
+}
+
+model Chargeback {
+  id              String           @id @default(uuid())
+  companyId       String
+  bookingId       String
+  cardProcessorId String
+  amount          Int
+  currencyId      String
+  status          ChargebackStatus @default(OPEN)
+  reason          String?          @db.VarChar(500)
+  filedAt         DateTime         @default(now())
+  resolvedAt      DateTime?
+  createdById     String
+  version         Int              @default(0)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  deletedAt       DateTime?
+
+  booking       Booking       @relation(fields: [bookingId], references: [id])
+  cardProcessor CardProcessor @relation(fields: [cardProcessorId], references: [id])
+  currency      Currency      @relation(fields: [currencyId], references: [id])
+
+  @@index([companyId])
+  @@index([bookingId])
+  @@index([companyId, status])
+  @@map("chargebacks")
+}
+
+model Refund {
+  id          String       @id @default(uuid())
+  companyId   String
+  bookingId   String
+  amount      Int
+  currencyId  String
+  status      RefundStatus @default(PENDING)
+  reason      String?      @db.VarChar(500)
+  requestedAt DateTime     @default(now())
+  processedAt DateTime?
+  createdById String
+  version     Int          @default(0)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  deletedAt   DateTime?
+
+  booking  Booking  @relation(fields: [bookingId], references: [id])
+  currency Currency @relation(fields: [currencyId], references: [id])
+
+  @@index([companyId])
+  @@index([bookingId])
+  @@index([companyId, status])
+  @@map("refunds")
+}
+
+model ActivityLog {
+  id             String         @id @default(uuid())
+  companyId      String
+  actorId        String?
+  actorName      String         @db.VarChar(200)
+  action         ActivityAction
+  entityType     String         @db.VarChar(50)
+  entityId       String?
+  entityLabel    String?        @db.VarChar(200)
+  beforeSnapshot Json?
+  afterSnapshot  Json?
+  ipAddress      String?        @db.VarChar(45)
+  userAgent      String?        @db.VarChar(500)
+  createdAt      DateTime       @default(now())
+
+  company Company @relation(fields: [companyId], references: [id])
+  actor   User?   @relation(fields: [actorId], references: [id])
+
+  @@index([companyId, createdAt(sort: Desc)])
+  @@index([companyId, entityType, entityId])
+  @@index([companyId, actorId])
+  @@index([companyId, action])
+  @@map("activity_logs")
+}
+
+model SecurityLog {
+  id        String        @id @default(uuid())
+  companyId String
+  userId    String?
+  event     SecurityEvent
+  ipAddress String        @db.VarChar(45)
+  userAgent String?       @db.VarChar(500)
+  metadata  Json?
+  createdAt DateTime      @default(now())
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@index([companyId, createdAt(sort: Desc)])
+  @@index([companyId, event])
+  @@index([companyId, userId])
+  @@map("security_logs")
+}
+
+model Notification {
+  id          String               @id @default(uuid())
+  companyId   String
+  userId      String
+  title       String               @db.VarChar(200)
+  body        String               @db.VarChar(1000)
+  severity    NotificationSeverity @default(INFO)
+  sourceType  String?              @db.VarChar(50)
+  sourceId    String?
+  actionUrl   String?              @db.VarChar(500)
+  readAt      DateTime?
+  dismissedAt DateTime?
+  createdAt   DateTime             @default(now())
+
+  company Company @relation(fields: [companyId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+model IPRule {
+  id          String     @id @default(uuid())
+  companyId   String
+  type        IPRuleType
+  cidr        String     @db.VarChar(50)
+  description String?    @db.VarChar(300)
+  createdById String
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  deletedAt   DateTime?
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@index([companyId, type])
+  @@map("ip_rules")
+}
+
+model Airline {
+  id          String    @id @default(uuid())
+  companyId   String?
+  airlineName String    @db.VarChar(200)
+  iataCode    String    @db.VarChar(3)
+  icaoCode    String?   @db.VarChar(4)
+  country     String    @db.VarChar(100)
+  logoUrl     String?   @db.VarChar(500)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  company  Company?  @relation(fields: [companyId], references: [id])
+  bookings Booking[]
+  mcos     MCO[]
+
+  @@index([companyId])
+  @@index([iataCode])
+  @@index([companyId, isActive])
+  @@map("airlines")
+}
+
+model BookingClass {
+  id        String    @id @default(uuid())
+  companyId String?
+  name      String    @db.VarChar(100)
+  code      String    @db.VarChar(5)
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  company  Company?  @relation(fields: [companyId], references: [id])
+  bookings Booking[]
+
+  @@index([companyId])
+  @@map("booking_classes")
+}
+
+model Provider {
+  id        String    @id @default(uuid())
+  companyId String?
+  name      String    @db.VarChar(200)
+  logoUrl   String?   @db.VarChar(500)
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  company  Company?  @relation(fields: [companyId], references: [id])
+  bookings Booking[]
+
+  @@index([companyId])
+  @@map("providers")
+}
+
+model CardProcessor {
+  id        String    @id @default(uuid())
+  companyId String?
+  name      String    @db.VarChar(200)
+  shortCode String?   @db.VarChar(10)
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  company     Company?     @relation(fields: [companyId], references: [id])
+  bookings    Booking[]
+  chargebacks Chargeback[]
+
+  @@index([companyId])
+  @@map("card_processors")
+}
+
+model Currency {
+  id            String    @id @default(uuid())
+  code          String    @unique @db.VarChar(3)
+  name          String    @db.VarChar(100)
+  symbol        String    @db.VarChar(5)
+  decimalPlaces Int       @default(2)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  bookings    Booking[]
+  revenue     Revenue[]
+  mcos        MCO[]
+  chargebacks Chargeback[]
+  refunds     Refund[]
+
+  @@map("currencies")
+}
+
+model CallQueue {
+  id          String    @id @default(uuid())
+  companyId   String
+  name        String    @db.VarChar(200)
+  phone       String?   @db.VarChar(30)
+  description String?   @db.VarChar(500)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  company  Company   @relation(fields: [companyId], references: [id])
+  bookings Booking[]
+
+  @@index([companyId])
+  @@map("call_queues")
+}
+
+model SavedView {
+  id        String   @id @default(uuid())
+  companyId String
+  userId    String
+  tableKey  String   @db.VarChar(50)
+  name      String   @db.VarChar(100)
+  filters   Json
+  sortBy    String?  @db.VarChar(50)
+  sortDir   String?  @db.VarChar(4)
+  columns   Json?
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@index([userId, tableKey])
+  @@map("saved_views")
+}
+
+model BookingNote {
+  id        String    @id @default(uuid())
+  bookingId String
+  userId    String
+  note      String    @db.Text
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@index([bookingId])
+  @@index([userId])
+  @@map("booking_notes")
+}
+
+// Personal, page-agnostic notes created from the global "Quick Notes" floating
+// widget. Deliberately independent of Booking — scoped to the authenticated
+// user (and their company, for tenancy consistency with every other model),
+// never to a specific booking. Coexists with BookingNote; neither references
+// the other.
+model QuickNote {
+  id        String    @id @default(uuid())
+  companyId String
+  userId    String
+  note      String    @db.Text
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  company Company @relation(fields: [companyId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@index([companyId])
+  @@index([userId])
+  @@index([userId, createdAt])
+  @@map("quick_notes")
+}

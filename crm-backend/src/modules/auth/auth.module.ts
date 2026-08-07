@@ -1,0 +1,28 @@
+import { Module }          from "@nestjs/common"
+import { JwtModule }       from "@nestjs/jwt"
+import { PassportModule }  from "@nestjs/passport"
+import { ConfigModule, ConfigService } from "@nestjs/config"
+import { AuthController }  from "./auth.controller"
+import { AuthService }     from "./auth.service"
+import { JwtStrategy }     from "./strategies/jwt.strategy"
+import { JwtAuthGuard }    from "./guards/jwt-auth.guard"
+import { PermissionsGuard } from "./guards/permissions.guard"
+import { IpGuard }         from "./guards/ip.guard"
+
+@Module({
+  imports: [
+    PassportModule.register({ defaultStrategy: "jwt" }),
+    JwtModule.registerAsync({
+      imports:    [ConfigModule],
+      inject:     [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        secret:      config.get("jwt.accessTokenSecret"),
+        signOptions: { expiresIn: config.get("jwt.accessTokenExpiry") ?? "15m" },
+      }),
+    }),
+  ],
+  controllers: [AuthController],
+  providers:   [AuthService, JwtStrategy, JwtAuthGuard, PermissionsGuard, IpGuard],
+  exports:     [AuthService, JwtAuthGuard, PermissionsGuard, IpGuard, JwtModule],
+})
+export class AuthModule {}
