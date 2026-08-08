@@ -1,8 +1,8 @@
-// tsconfig.build.json
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "rootDir": "./src"
+    "rootDir": "./src",
+    "incremental": false
   },
   "include": [
     "src/**/*"

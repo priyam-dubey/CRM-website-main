@@ -4,6 +4,9 @@ coverage/
 *.log
 npm-debug.log*
 
+dist/
+*.tsbuildinfo
+
 .env
 .env.local
 .env.*.local
