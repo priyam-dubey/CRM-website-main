@@ -75,9 +75,17 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get savedView() { return this.client.savedView }
   get bookingNote() { return this.client.bookingNote }
   get quickNote() { return this.client.quickNote }
+  get bookingTransaction() { return this.client.bookingTransaction }
+  get bookingVerification() { return this.client.bookingVerification }
+  get charge() { return this.client.charge }
+  get itinerarySegment() { return this.client.itinerarySegment }
+  get passenger() { return this.client.passenger }
+  get billingDetail() { return this.client.billingDetail }
+  get attachment() { return this.client.attachment }
 
   $transaction(arg: any) { return this.client.$transaction(arg) }
   $use(fn: any) { return this.client.$use?.(fn) }
+  $queryRaw<T = unknown>(strings: TemplateStringsArray, ...values: unknown[]): Promise<T> { return this.client.$queryRaw(strings, ...values) }
 
   private createNoOpClient() {
     const noop = () => Promise.resolve(null)
@@ -90,13 +98,16 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     return {
       $connect: noop, $disconnect: noop,
       $transaction: async (fn: any) => typeof fn === "function" ? fn(this) : Promise.all(fn),
+      $queryRaw: () => Promise.resolve([]),
       user: model(), company: model(), session: model(), booking: model(),
       revenue: model(), mCO: model(), chargeback: model(), refund: model(),
       activityLog: model(), securityLog: model(), notification: model(),
       iPRule: model(), airline: model(), bookingClass: model(), provider: model(),
       cardProcessor: model(), currency: model(), callQueue: model(), savedView: model(),
-      bookingNote: model(),
-      bookingTransaction: model(),
+      bookingNote: model(), quickNote: model(),
+      bookingTransaction: model(), bookingVerification: model(),
+      charge: model(), itinerarySegment: model(), passenger: model(),
+      billingDetail: model(), attachment: model(),
     }
   }
 }

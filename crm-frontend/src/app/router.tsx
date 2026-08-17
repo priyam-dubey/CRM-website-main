@@ -22,6 +22,7 @@ const SecurityLogsPage     = lazy(() => import('@/features/security/pages/Securi
 const ActivityPage         = lazy(() => import('@/features/activity/pages/ActivityPage'))
 const ProfilePage          = lazy(() => import('@/features/settings/pages/ProfilePage'))
 const AirlinesPage         = lazy(() => import('@/features/manage/airlines/pages/AirlinesPage'))
+const VerifyBookingPage    = lazy(() => import('@/features/verification/pages/VerifyBookingPage'))
 
 function PageLoader() {
   return (
@@ -63,6 +64,9 @@ function NotFoundPage() {
 }
 
 const router = createBrowserRouter([
+  // Public — the client verifying a booking never logs into the CRM, so this
+  // route sits outside both AuthGuard and GuestGuard entirely.
+  { path: '/verify/:token', element: <Suspense fallback={<PageLoader />}><VerifyBookingPage /></Suspense> },
   { element: <GuestGuard />, children: [
     { path: '/login', element: <LoginPage /> },
   ]},

@@ -19,12 +19,15 @@ const columns: ColumnDef<Booking>[] = [
   { id: "reference", accessorKey: "reference", size: 160,
     header: ({ column }) => <DataTableColumnHeader column={column} title="Reference" />,
     cell: ({ row }) => <span className="font-mono text-xs text-blue-600">{row.original.reference}</span> },
-  { id: "passengerName", accessorKey: "passengerName", size: 180,
+  { id: "passengerName", accessorFn: r => r.passengers?.[0] ? `${r.passengers[0].firstName} ${r.passengers[0].lastName}` : "—", size: 180,
     header: ({ column }) => <DataTableColumnHeader column={column} title="Passenger" />,
-    cell: ({ row }) => <span className="font-medium text-slate-900">{row.original.passengerName}</span> },
-  { id: "airline", accessorFn: r => r.airline?.airlineName, size: 140,
+    cell: ({ row }) => {
+      const p = row.original.passengers?.[0]
+      return <span className="font-medium text-slate-900">{p ? `${p.firstName} ${p.lastName}` : "—"}</span>
+    } },
+  { id: "airline", accessorFn: r => r.segments?.[0]?.airline?.airlineName, size: 140,
     header: "Airline",
-    cell: ({ row }) => <span className="text-slate-500">{row.original.airline?.airlineName ?? "—"}</span> },
+    cell: ({ row }) => <span className="text-slate-500">{row.original.segments?.[0]?.airline?.airlineName ?? "—"}</span> },
   { id: "status", accessorKey: "status", size: 130,
     header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
     cell: ({ row }) => (
@@ -32,19 +35,26 @@ const columns: ColumnDef<Booking>[] = [
         {BOOKING_STATUS_LABELS[row.original.status]}
       </Badge>
     ) },
-  { id: "class", accessorFn: r => r.class?.name, size: 120,
+  { id: "class", accessorFn: r => r.segments?.[0]?.class?.name, size: 120,
     header: "Class",
-    cell: ({ row }) => <span className="text-slate-500">{row.original.class?.name ?? "—"}</span> },
-  { id: "grossAmount", accessorKey: "grossAmount", size: 130,
+    cell: ({ row }) => <span className="text-slate-500">{row.original.segments?.[0]?.class?.name ?? "—"}</span> },
+  { id: "grossAmount", accessorFn: r => r.charges?.reduce((s, c) => s + c.amount, 0) ?? 0, size: 130,
     header: ({ column }) => <DataTableColumnHeader column={column} title="Amount" />,
-    cell: ({ row }) => (
-      <span className="font-medium tabular-nums">
-        {formatCurrency(row.original.grossAmount, row.original.currency?.code ?? "USD")}
-      </span>
-    ) },
-  { id: "travelDate", accessorKey: "travelDate", size: 120,
+    cell: ({ row }) => {
+      const charges = row.original.charges ?? []
+      const total = charges.reduce((s, c) => s + c.amount, 0)
+      return (
+        <span className="font-medium tabular-nums">
+          {formatCurrency(total, charges[0]?.currency?.code ?? "USD")}
+        </span>
+      )
+    } },
+  { id: "travelDate", accessorFn: r => r.segments?.[0]?.departureAt, size: 120,
     header: ({ column }) => <DataTableColumnHeader column={column} title="Travel Date" />,
-    cell: ({ row }) => <span className="text-slate-400 text-xs">{formatDate(row.original.travelDate)}</span> },
+    cell: ({ row }) => {
+      const d = row.original.segments?.[0]?.departureAt
+      return <span className="text-slate-400 text-xs">{d ? formatDate(d) : "—"}</span>
+    } },
   { id: "createdAt", accessorKey: "createdAt", size: 120,
     header: ({ column }) => <DataTableColumnHeader column={column} title="Created" />,
     cell: ({ row }) => <span className="text-slate-400 text-xs">{formatDate(row.original.createdAt)}</span> },

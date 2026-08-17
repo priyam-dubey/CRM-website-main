@@ -79,6 +79,12 @@ enum IPRuleType {
   DENY
 }
 
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  EXPIRED
+}
+
 // ─── Booking transaction foundation (hybrid architecture) ──────────────────
 // Booking remains the primary aggregate. Every booking currently has exactly
 // one BookingTransaction (created automatically alongside the booking), but
@@ -130,6 +136,7 @@ model Company {
   savedViews     SavedView[]
   sessions       Session[]
   quickNotes     QuickNote[]
+  bookingVerifications BookingVerification[]
 
   @@index([isActive])
   @@map("companies")
@@ -161,6 +168,8 @@ model User {
   bookingNotes     BookingNote[]
   createdTransactions BookingTransaction[]
   quickNotes       QuickNote[]
+  requestedVerifications BookingVerification[]
+  uploadedAttachments Attachment[]
 
   @@unique([email, companyId])
   @@index([companyId])
@@ -190,59 +199,203 @@ model Session {
   @@map("sessions")
 }
 
-model Booking {
-  id              String        @id @default(uuid())
-  companyId       String
-  reference       String        @db.VarChar(30)
-  pnr             String        @db.VarChar(20)
-  passengerName   String        @db.VarChar(200)
-  passengerEmail  String?       @db.VarChar(320)
-  passengerPhone  String?       @db.VarChar(30)
-  status          BookingStatus @default(PENDING)
-  airlineId       String
-  classId         String
-  providerId      String
-  cardProcessorId String
-  currencyId      String
-  callQueueId     String?
-  assignedToId    String?
-  createdById     String
-  grossAmount     Int
-  netAmount       Int
-  travelDate      DateTime
-  returnDate      DateTime?
-  notes           String?       @db.Text
-  isUrgent        Boolean       @default(false)
-  version         Int           @default(0)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  deletedAt       DateTime?
+enum PassengerType {
+  ADULT
+  CHILD
+  INFANT_ON_SEAT
+  INFANT_ON_LAP
+}
 
-  company       Company       @relation(fields: [companyId], references: [id])
-  airline       Airline       @relation(fields: [airlineId], references: [id])
-  class         BookingClass  @relation(fields: [classId], references: [id])
-  provider      Provider      @relation(fields: [providerId], references: [id])
-  cardProcessor CardProcessor @relation(fields: [cardProcessorId], references: [id])
-  currency      Currency      @relation(fields: [currencyId], references: [id])
-  callQueue     CallQueue?    @relation(fields: [callQueueId], references: [id])
-  assignedTo    User?         @relation("BookingAssignedTo", fields: [assignedToId], references: [id])
-  createdBy     User          @relation("BookingCreatedBy", fields: [createdById], references: [id])
+enum ItineraryDirection {
+  OUTBOUND
+  RETURN
+}
+
+// Booking is now the top-level transaction record in the client's original
+// CRM sense (BID-numbered), not a single-flight/single-passenger row. Flight,
+// passenger, charge, and billing data all moved to dedicated child models —
+// see ItinerarySegment, Passenger, Charge, BillingDetail below. This mirrors
+// the client's "Create New Transaction" -> 7-step wizard structure exactly
+// (Charges & Fees / Basic Details / Itinerary / Passengers / Billing &
+// Payment / Special Details / Attachments), rather than the CRM's original
+// single-flight assumption.
+model Booking {
+  id           String        @id @default(uuid())
+  companyId    String
+  // Human-facing sequential ID shown throughout the client's original CRM
+  // (e.g. "BID1879"). A real Postgres sequence via @default(autoincrement()),
+  // not a formatted string, so uniqueness is guaranteed at the DB level;
+  // the "BID" prefix is applied when formatting for display/API responses.
+  bidNumber    Int           @unique @default(autoincrement())
+  reference    String        @db.VarChar(30)
+  // Master reservation/confirmation number entered in "Basic Details"
+  // (client's original CRM shows this separately from any per-segment
+  // PNR/Confirmation on individual flights — see ItinerarySegment.pnrConfirmation).
+  pnr          String?       @db.VarChar(20)
+  // Entered once in the "Create New Transaction" pre-wizard step; the
+  // authorization email is sent here. Distinct from any individual
+  // passenger's own contact info in Passenger.
+  customerEmail String       @db.VarChar(320)
+  // "Bid Status" in the client's original CRM — reusing the existing
+  // BookingStatus enum rather than inventing a parallel one; same states
+  // (Pending/Confirmed/Ticketed/Cancelled/Refunded/Chargeback) apply.
+  status        BookingStatus @default(PENDING)
+  providerId    String
+  callQueueId   String?
+  assignedToId  String?
+  createdById   String
+  isUrgent      Boolean       @default(false)
+  version       Int           @default(0)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  deletedAt     DateTime?
+
+  company       Company               @relation(fields: [companyId], references: [id])
+  provider      Provider              @relation(fields: [providerId], references: [id])
+  callQueue     CallQueue?            @relation(fields: [callQueueId], references: [id])
+  assignedTo    User?                 @relation("BookingAssignedTo", fields: [assignedToId], references: [id])
+  createdBy     User                  @relation("BookingCreatedBy", fields: [createdById], references: [id])
   revenue       Revenue[]
   mco           MCO?
   bookingNotes  BookingNote[]
   chargebacks   Chargeback[]
   refunds       Refund[]
   transactions  BookingTransaction[]
+  verifications BookingVerification[]
+  charges       Charge[]
+  segments      ItinerarySegment[]
+  passengers    Passenger[]
+  billing       BillingDetail?
+  attachments   Attachment[]
 
   @@unique([reference, companyId])
   @@index([companyId])
   @@index([companyId, status])
   @@index([companyId, createdAt(sort: Desc)])
-  @@index([companyId, travelDate])
   @@index([companyId, assignedToId])
-  @@index([companyId, airlineId])
   @@index([companyId, isUrgent])
   @@map("bookings")
+}
+
+// "Charges & Fees" step — one row per charge, each independently amount +
+// currency, matching the per-row currency dropdown (USD/MXN/INR/EURO/CAD/ARS)
+// shown in the screenshots. Booking-level totals are no longer stored
+// directly; they're derived by summing these (see BookingsRepository).
+model Charge {
+  id          String   @id @default(uuid())
+  bookingId   String
+  chargeNumber Int
+  amount      Int
+  currencyId  String
+  description String?  @db.VarChar(500)
+  createdAt   DateTime @default(now())
+
+  booking  Booking  @relation(fields: [bookingId], references: [id])
+  currency Currency @relation(fields: [currencyId], references: [id])
+
+  @@unique([bookingId, chargeNumber])
+  @@index([bookingId])
+  @@map("charges")
+}
+
+// "Itinerary Details" step — one row per flight leg. direction distinguishes
+// Outbound vs Return (client's screenshots show at least an Outbound table;
+// Round Trip / Multi City itinerary types imply Return/additional segments
+// using the same shape). from/to are free-text as shown in the screenshots
+// (e.g. "INDIA" / "USA") rather than an airport-code lookup, since no airport
+// model/dropdown is evidenced anywhere in the screenshots.
+model ItinerarySegment {
+  id              String             @id @default(uuid())
+  bookingId       String
+  direction       ItineraryDirection @default(OUTBOUND)
+  segmentNumber   Int
+  airlineId       String
+  flightNumber    String             @db.VarChar(20)
+  fromText        String             @db.VarChar(100)
+  toText          String             @db.VarChar(100)
+  departureAt     DateTime
+  arrivalAt       DateTime
+  classId         String
+  pnrConfirmation String?            @db.VarChar(30)
+  createdAt       DateTime           @default(now())
+
+  booking Booking      @relation(fields: [bookingId], references: [id])
+  airline Airline      @relation(fields: [airlineId], references: [id])
+  class   BookingClass @relation(fields: [classId], references: [id])
+
+  @@index([bookingId])
+  @@map("itinerary_segments")
+}
+
+// "Passenger Details" step — one row per traveler, matching the client's
+// Type/First/Middle/Last/DOB/Ticket Number table exactly.
+model Passenger {
+  id              String        @id @default(uuid())
+  bookingId       String
+  passengerNumber Int
+  type            PassengerType
+  firstName       String        @db.VarChar(100)
+  middleName      String?       @db.VarChar(100)
+  lastName        String        @db.VarChar(100)
+  dob             DateTime?
+  ticketNumber    String?       @db.VarChar(50)
+  createdAt       DateTime      @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+
+  @@index([bookingId])
+  @@map("passengers")
+}
+
+// "Billing & Payment" step. PCI-DSS-safe by construction, not by omission —
+// see the accompanying implementation notes: the CRM UI still collects every
+// field the client's original form shows (full card number, CVV, expiry),
+// but only cardLast4 + expiry month/year ever reach this table. CVV is never
+// transmitted past the browser and is never a column here at all — matching
+// what the client's own "Itinerary Authorization" email already does
+// (CVV Number: "..." — never actually shown/stored downstream either).
+model BillingDetail {
+  id               String   @id @default(uuid())
+  bookingId        String   @unique
+  cardHolderName   String   @db.VarChar(200)
+  cardProcessorId  String
+  cardLast4        String   @db.VarChar(4)
+  expiryMonth      Int
+  expiryYear       Int
+  billingEmail     String   @db.VarChar(320)
+  billingContactNo String   @db.VarChar(30)
+  billingStreet    String?  @db.VarChar(300)
+  billingCity      String?  @db.VarChar(100)
+  billingState     String?  @db.VarChar(100)
+  billingZip       String?  @db.VarChar(20)
+  billingCountry   String?  @db.VarChar(100)
+  purchaseDate     DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  booking       Booking       @relation(fields: [bookingId], references: [id])
+  cardProcessor CardProcessor @relation(fields: [cardProcessorId], references: [id])
+
+  @@map("billing_details")
+}
+
+// "Attachments" step — "Proofs" image uploads. Storage backend (S3 or
+// equivalent) is not yet part of this project's infrastructure; fileUrl is
+// expected to hold a URL/key from whatever object storage is configured —
+// see implementation notes for what's still required here.
+model Attachment {
+  id           String   @id @default(uuid())
+  bookingId    String
+  fileUrl      String   @db.VarChar(1000)
+  fileName     String   @db.VarChar(255)
+  uploadedById String
+  createdAt    DateTime @default(now())
+
+  booking    Booking @relation(fields: [bookingId], references: [id])
+  uploadedBy User    @relation(fields: [uploadedById], references: [id])
+
+  @@index([bookingId])
+  @@map("attachments")
 }
 
 // BookingTransaction: the first step of the hybrid architecture described in
@@ -252,6 +405,13 @@ model Booking {
 // "Create Revision" action can append TRANSACTION #2, #3, etc. without a
 // further schema change — deferred deliberately, per the "current phase"
 // scope, rather than implemented now.
+//
+// "Special Details" (step 6 of the wizard) reuses `metadata` below rather
+// than a new model: the screenshots show it as empty/transaction-type-
+// dependent ("No special fields required for this transaction type" for
+// NEW_BOOKING), so a flexible Json bag — already present on this model —
+// is the correct fit without inventing fields for transaction types that
+// have no screenshot evidence.
 model BookingTransaction {
   id                String            @id @default(uuid())
   bookingId         String
@@ -272,6 +432,52 @@ model BookingTransaction {
   @@index([bookingId])
   @@index([transactionType])
   @@map("booking_transactions")
+}
+
+// Client-facing booking verification (email link -> public review page ->
+// digital signature). Deliberately a separate model rather than fields on
+// Booking: a booking can be re-sent for verification, and each attempt needs
+// its own token/expiry/signature/audit trail without overwriting history.
+//
+// tokenHash follows the exact same pattern as Session.refreshTokenHash: the
+// raw token is put in the email link and never stored; only a bcrypt hash is
+// persisted, compared via the same compareToken() util used by auth refresh.
+//
+// bookingSnapshot freezes the exact fields the client was shown/reviewed at
+// send-time. If the booking is edited after the email goes out, verification
+// (see BookingVerificationService.verify) is rejected rather than silently
+// letting the client sign off on data that no longer matches — the CRM user
+// must send a fresh verification request instead.
+model BookingVerification {
+  id               String             @id @default(uuid())
+  bookingId        String
+  companyId        String
+  requestedById    String
+  tokenHash        String             @unique @db.VarChar(100)
+  status           VerificationStatus @default(PENDING)
+  clientEmail      String             @db.VarChar(320)
+  bookingSnapshot  Json
+  // Vestigial: the original design captured a drawn signature. The client's
+  // actual "Itinerary Authorization" screenshots show a single-click
+  // "I Authorize" action instead, with the full booking/passenger/flight/
+  // card breakdown already inline in the email — no signature capture.
+  // Left nullable/unused rather than dropped, since removing a column is a
+  // more invasive migration than simply not writing to it going forward.
+  signatureDataUrl String?            @db.Text
+  expiresAt        DateTime
+  verifiedAt       DateTime?
+  verifiedIp       String?            @db.VarChar(45)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  booking     Booking @relation(fields: [bookingId], references: [id])
+  company     Company @relation(fields: [companyId], references: [id])
+  requestedBy User    @relation(fields: [requestedById], references: [id])
+
+  @@index([bookingId])
+  @@index([companyId])
+  @@index([status])
+  @@map("booking_verifications")
 }
 
 model Revenue {
@@ -473,7 +679,7 @@ model Airline {
   deletedAt   DateTime?
 
   company  Company?  @relation(fields: [companyId], references: [id])
-  bookings Booking[]
+  segments ItinerarySegment[]
   mcos     MCO[]
 
   @@index([companyId])
@@ -493,7 +699,7 @@ model BookingClass {
   deletedAt DateTime?
 
   company  Company?  @relation(fields: [companyId], references: [id])
-  bookings Booking[]
+  segments ItinerarySegment[]
 
   @@index([companyId])
   @@map("booking_classes")
@@ -526,9 +732,9 @@ model CardProcessor {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  company     Company?     @relation(fields: [companyId], references: [id])
-  bookings    Booking[]
-  chargebacks Chargeback[]
+  company        Company?        @relation(fields: [companyId], references: [id])
+  billingDetails BillingDetail[]
+  chargebacks    Chargeback[]
 
   @@index([companyId])
   @@map("card_processors")
@@ -544,7 +750,7 @@ model Currency {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  bookings    Booking[]
+  charges     Charge[]
   revenue     Revenue[]
   mcos        MCO[]
   chargebacks Chargeback[]

@@ -194,24 +194,28 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {bookings.map(b => (
+                {bookings.map(b => {
+                  const p = b.passengers?.[0]
+                  const total = (b.charges ?? []).reduce((s, c) => s + c.amount, 0)
+                  return (
                   <tr key={b.id} className="border-b border-slate-200 last:border-0 hover:bg-slate-50 transition-colors">
                     <td className="px-4 py-3">
                       <Link to={`/bookings/${b.id}`} className="font-mono text-xs text-blue-600 hover:underline">{b.reference}</Link>
                     </td>
-                    <td className="px-4 py-3 text-slate-900">{b.passengerName}</td>
-                    <td className="px-4 py-3 text-slate-500">{b.airline?.airlineName ?? "—"}</td>
+                    <td className="px-4 py-3 text-slate-900">{p ? `${p.firstName} ${p.lastName}` : "—"}</td>
+                    <td className="px-4 py-3 text-slate-500">{b.segments?.[0]?.airline?.airlineName ?? "—"}</td>
                     <td className="px-4 py-3">
                       <Badge variant={BOOKING_STATUS_COLORS[b.status] as BadgeProps["variant"]} dot>
                         {BOOKING_STATUS_LABELS[b.status]}
                       </Badge>
                     </td>
                     <td className="px-4 py-3 font-medium text-slate-900 tabular-nums">
-                      {formatCurrency(b.grossAmount, b.currency?.code ?? "USD")}
+                      {formatCurrency(total, b.charges?.[0]?.currency?.code ?? "USD")}
                     </td>
                     <td className="px-4 py-3 text-slate-400 text-xs">{formatDate(b.createdAt)}</td>
                   </tr>
-                ))}
+                  )
+                })}
                 {bookings.length === 0 && (
                   <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-400">No bookings yet</td></tr>
                 )}

@@ -207,7 +207,8 @@ export class RevenueService {
         where, skip, take: filters.per_page,
         orderBy: { createdAt: filters.sort_dir ?? "desc" },
         select: {
-          id: true, reference: true, status: true, createdAt: true, grossAmount: true, netAmount: true,
+          id: true, reference: true, status: true, createdAt: true,
+          charges:     { select: { amount: true } },
           mco:         { select: { amount: true } },
           refunds:     { select: { amount: true } },
           chargebacks: { select: { amount: true } },
@@ -217,12 +218,13 @@ export class RevenueService {
       }),
       this.prisma.booking.count({ where }),
       this.prisma.booking.findMany({
-        where, select: { grossAmount: true, netAmount: true, refunds: { select: { amount: true } }, chargebacks: { select: { amount: true } } },
+        where, select: { charges: { select: { amount: true } }, refunds: { select: { amount: true } }, chargebacks: { select: { amount: true } } },
       }),
     ])
 
     const rows = bookings.map((b: any) => {
       const agent = b.assignedTo ?? b.createdBy
+      const gross = b.charges.reduce((s: number, c: any) => s + c.amount, 0)
       return {
         bookingId:   b.reference,
         mco:         b.mco?.amount ?? 0,
@@ -231,11 +233,12 @@ export class RevenueService {
         bookingStatus: b.status,
         date:        b.createdAt,
         agent:       agent ? `${agent.firstName} ${agent.lastName}` : "Unknown",
+        grossAmount: gross,
       }
     })
 
-    const totalRevenue = aggregates.reduce((s: number, b: any) => s + b.grossAmount, 0)
-    const netRevenue    = aggregates.reduce((s: number, b: any) => s + b.netAmount, 0)
+    const totalRevenue = aggregates.reduce((s: number, b: any) => s + b.charges.reduce((x: number, c: any) => x + c.amount, 0), 0)
+    const netRevenue    = totalRevenue // net = gross, same convention as booking creation (see BookingsService.create)
     const totalRefunds = aggregates.reduce((s: number, b: any) => s + b.refunds.reduce((x: number, r: any) => x + r.amount, 0), 0)
     const totalChargebacks = aggregates.reduce((s: number, b: any) => s + b.chargebacks.reduce((x: number, c: any) => x + c.amount, 0), 0)
 

@@ -1,42 +1,26 @@
-import { IsString, IsUUID, IsInt, IsOptional, IsISO8601, MaxLength, Min, Max, IsEmail, IsIn, IsNumber, IsBoolean } from "class-validator"
+import { IsString, IsUUID, IsInt, IsOptional, MaxLength, Min, IsEmail, IsIn, IsBoolean } from "class-validator"
 import { Type } from "class-transformer"
 import { BookingStatus } from "../../../shared/types/prisma.types"
 
+// Scoped to top-level Booking fields only. Charges/segments/passengers/
+// billing are set at creation; modifying them is the "Create Revision"
+// action (appends a new BookingTransaction) shown in the client's
+// screenshots, not an in-place PATCH — matching the existing
+// BookingTransaction architecture rather than inventing nested-PATCH
+// semantics with no screenshot evidence.
 export class UpdateBookingDto {
-  @IsOptional() @IsString() @MaxLength(200)
-  passengerName?: string
-
   @IsOptional() @IsEmail() @MaxLength(320)
-  passengerEmail?: string
-
-  @IsOptional() @IsString() @MaxLength(30)
-  passengerPhone?: string
+  customerEmail?: string
 
   @IsOptional() @IsString() @MaxLength(20)
   pnr?: string
 
-  @IsOptional() @IsString() @IsIn(Object.values(BookingStatus))
+  @IsOptional() @IsIn(Object.values(BookingStatus))
   status?: BookingStatus
 
-  @IsOptional() @IsUUID() airlineId?: string
-  @IsOptional() @IsUUID() classId?: string
   @IsOptional() @IsUUID() providerId?: string
-  @IsOptional() @IsUUID() cardProcessorId?: string
-  @IsOptional() @IsUUID() currencyId?: string
   @IsOptional() @IsUUID() callQueueId?: string
   @IsOptional() @IsUUID() assignedToId?: string
-
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(999_999_999)
-  grossAmount?: number
-
-  @IsOptional() @IsISO8601()
-  travelDate?: string
-
-  @IsOptional() @IsISO8601()
-  returnDate?: string
-
-  @IsOptional() @IsString() @MaxLength(2000)
-  notes?: string
 
   @IsOptional() @IsBoolean()
   isUrgent?: boolean

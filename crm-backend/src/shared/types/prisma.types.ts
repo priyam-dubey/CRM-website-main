@@ -15,6 +15,8 @@ export enum NotificationSeverity { INFO = 'INFO', SUCCESS = 'SUCCESS', WARNING =
 export enum IPRuleType       { ALLOW = 'ALLOW', DENY = 'DENY' }
 export enum TransactionType  { NEW_BOOKING = 'NEW_BOOKING', CANCEL_FOR_REFUND = 'CANCEL_FOR_REFUND', CANCEL_FOR_FUTURE_CREDIT = 'CANCEL_FOR_FUTURE_CREDIT', EXCHANGE = 'EXCHANGE', UPGRADE = 'UPGRADE', BAGGAGE_ADDON = 'BAGGAGE_ADDON', EXTRA_ADDON = 'EXTRA_ADDON', SEAT_ASSIGNMENT = 'SEAT_ASSIGNMENT', TICKET_REISSUANCE = 'TICKET_REISSUANCE' }
 export enum TransactionStatus { DRAFT = 'DRAFT', IN_PROGRESS = 'IN_PROGRESS', COMPLETED = 'COMPLETED', CANCELLED = 'CANCELLED' }
+export enum PassengerType     { ADULT = 'ADULT', CHILD = 'CHILD', INFANT_ON_SEAT = 'INFANT_ON_SEAT', INFANT_ON_LAP = 'INFANT_ON_LAP' }
+export enum ItineraryDirection { OUTBOUND = 'OUTBOUND', RETURN = 'RETURN' }
 
 // Minimal Prisma namespace shim for where/orderBy/create/update input types
 export namespace Prisma {

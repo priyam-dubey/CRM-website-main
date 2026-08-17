@@ -26,10 +26,23 @@ async function main() {
   console.log("Seeding database...")
 
   // ── Company ──────────────────────────────────────────────
+  // metadata carries the "Itinerary Authorization" email branding (logo/
+  // support contact/address shown in the header/footer) — see
+  // BookingVerificationService.readBranding. Values mirror the client's own
+  // screenshots so the demo email matches their original CRM's output.
   const company = await prisma.company.upsert({
     where: { slug: "demo-company" },
     update: {},
-    create: { name: "Demo Company", slug: "demo-company", isActive: true, ipRestrictionEnabled: true },
+    create: {
+      name: "Demo Company", slug: "demo-company", isActive: true, ipRestrictionEnabled: true,
+      metadata: {
+        brandName: "aerodeals",
+        supportPhoneUsa: "888-807-5420",
+        supportPhoneMexico: "800-351-0189",
+        supportEmail: "customersupport@yourbookingdetail.com",
+        address: "9600 Two Notch Rd #5 Columbia, SC 29223, USA",
+      },
+    },
   })
   console.log("Company:", company.slug)
 
@@ -64,29 +77,73 @@ async function main() {
   })
 
   // ── Reference data ───────────────────────────────────────
+  // Currency list matches the per-charge currency dropdown in the client's
+  // original CRM (USD/MXN/INR/EURO/CAD/ARS) exactly, plus GBP/AED already
+  // used elsewhere in this demo dataset.
   const currencySeeds = [
-    { code: "USD", name: "US Dollar",    symbol: "$",   decimalPlaces: 2 },
-    { code: "EUR", name: "Euro",         symbol: "€",   decimalPlaces: 2 },
-    { code: "GBP", name: "British Pound",symbol: "£",   decimalPlaces: 2 },
-    { code: "INR", name: "Indian Rupee", symbol: "₹",   decimalPlaces: 2 },
-    { code: "AED", name: "UAE Dirham",   symbol: "د.إ", decimalPlaces: 2 },
+    { code: "USD", name: "US Dollar",      symbol: "$",   decimalPlaces: 2 },
+    { code: "MXN", name: "Mexican Peso",   symbol: "$",   decimalPlaces: 2 },
+    { code: "INR", name: "Indian Rupee",   symbol: "₹",   decimalPlaces: 2 },
+    { code: "EUR", name: "Euro",           symbol: "€",   decimalPlaces: 2 },
+    { code: "CAD", name: "Canadian Dollar",symbol: "$",   decimalPlaces: 2 },
+    { code: "ARS", name: "Argentine Peso", symbol: "$",   decimalPlaces: 2 },
+    { code: "GBP", name: "British Pound",  symbol: "£",   decimalPlaces: 2 },
+    { code: "AED", name: "UAE Dirham",     symbol: "د.إ", decimalPlaces: 2 },
   ]
   for (const c of currencySeeds) {
     await prisma.currency.upsert({ where: { code: c.code }, update: {}, create: { ...c, isActive: true } })
   }
   const currencies = await prisma.currency.findMany({ where: { code: { in: currencySeeds.map(c => c.code) } } }) as Array<{ id: string }>
 
+  // Airline list matches the client's original CRM's airline dropdown
+  // (screenshots) as closely as reasonably reproducible. Note: "Expedia"
+  // appeared in that dropdown too, sandwiched among real airlines — almost
+  // certainly a data artifact in the client's own system (a provider name
+  // leaking into an airline list), not intentionally an airline, so it is
+  // deliberately NOT included here. Flag to the client if it should be.
   const airlineSeeds = [
-    { airlineName: "Emirates",           iataCode: "EK", icaoCode: "UAE", country: "United Arab Emirates" },
-    { airlineName: "Qatar Airways",      iataCode: "QR", icaoCode: "QTR", country: "Qatar" },
-    { airlineName: "Lufthansa",          iataCode: "LH", icaoCode: "DLH", country: "Germany" },
-    { airlineName: "British Airways",    iataCode: "BA", icaoCode: "BAW", country: "United Kingdom" },
-    { airlineName: "Air India",          iataCode: "AI", icaoCode: "AIC", country: "India" },
-    { airlineName: "Singapore Airlines", iataCode: "SQ", icaoCode: "SIA", country: "Singapore" },
+    { airlineName: "American Airlines",  iataCode: "AA", icaoCode: "AAL", country: "United States" },
+    { airlineName: "Delta Airlines",     iataCode: "DL", icaoCode: "DAL", country: "United States" },
+    { airlineName: "United Airlines",    iataCode: "UA", icaoCode: "UAL", country: "United States" },
+    { airlineName: "Spirit Airlines",    iataCode: "NK", icaoCode: "NKS", country: "United States" },
+    { airlineName: "Frontier Airlines",  iataCode: "F9", icaoCode: "FFT", country: "United States" },
+    { airlineName: "JetBlue Airways",    iataCode: "B6", icaoCode: "JBU", country: "United States" },
+    { airlineName: "Southwest Airlines", iataCode: "WN", icaoCode: "SWA", country: "United States" },
+    { airlineName: "Alaska Airlines",    iataCode: "AS", icaoCode: "ASA", country: "United States" },
+    { airlineName: "Air Canada",         iataCode: "AC", icaoCode: "ACA", country: "Canada" },
     { airlineName: "Air France",         iataCode: "AF", icaoCode: "AFR", country: "France" },
-    { airlineName: "KLM",                iataCode: "KL", icaoCode: "KLM", country: "Netherlands" },
+    { airlineName: "Emirates",           iataCode: "EK", icaoCode: "UAE", country: "United Arab Emirates" },
+    { airlineName: "British Airways",    iataCode: "BA", icaoCode: "BAW", country: "United Kingdom" },
+    { airlineName: "Qatar Airways",      iataCode: "QR", icaoCode: "QTR", country: "Qatar" },
+    { airlineName: "Volaris",            iataCode: "Y4", icaoCode: "VOI", country: "Mexico" },
+    { airlineName: "Viva Aerobus",       iataCode: "VB", icaoCode: "VIV", country: "Mexico" },
+    { airlineName: "Wingo",              iataCode: "P5", icaoCode: "WIT", country: "Colombia" },
+    { airlineName: "WestJet",            iataCode: "WS", icaoCode: "WJA", country: "Canada" },
     { airlineName: "Turkish Airlines",   iataCode: "TK", icaoCode: "THY", country: "Turkey" },
+    { airlineName: "Copa Airlines",      iataCode: "CM", icaoCode: "CMP", country: "Panama" },
+    { airlineName: "ANA",                iataCode: "NH", icaoCode: "ANA", country: "Japan" },
+    { airlineName: "Aeromexico",         iataCode: "AM", icaoCode: "AMX", country: "Mexico" },
+    { airlineName: "Air Europa",         iataCode: "UX", icaoCode: "AEA", country: "Spain" },
+    { airlineName: "Air Transat",        iataCode: "TS", icaoCode: "TSC", country: "Canada" },
+    { airlineName: "Avianca",            iataCode: "AV", icaoCode: "AVA", country: "Colombia" },
+    { airlineName: "Condor",             iataCode: "DE", icaoCode: "CFG", country: "Germany" },
+    { airlineName: "China Airlines",     iataCode: "CI", icaoCode: "CAL", country: "Taiwan" },
     { airlineName: "Etihad Airways",     iataCode: "EY", icaoCode: "ETD", country: "United Arab Emirates" },
+    { airlineName: "Aerolineas Argentinas", iataCode: "AR", icaoCode: "ARG", country: "Argentina" },
+    { airlineName: "Brussels Airlines",  iataCode: "SN", icaoCode: "BEL", country: "Belgium" },
+    { airlineName: "Swiss International Air Lines", iataCode: "LX", icaoCode: "SWR", country: "Switzerland" },
+    { airlineName: "Hainan Airlines",    iataCode: "HU", icaoCode: "CHH", country: "China" },
+    { airlineName: "China Eastern Airlines", iataCode: "MU", icaoCode: "CES", country: "China" },
+    { airlineName: "China Southern Airlines", iataCode: "CZ", icaoCode: "CSN", country: "China" },
+    { airlineName: "Shanghai Airlines",  iataCode: "FM", icaoCode: "CSH", country: "China" },
+    { airlineName: "Air China",          iataCode: "CA", icaoCode: "CCA", country: "China" },
+    { airlineName: "Aer Lingus",         iataCode: "EI", icaoCode: "EIN", country: "Ireland" },
+    { airlineName: "Arajet",             iataCode: "DM", icaoCode: "AJT", country: "Dominican Republic" },
+    { airlineName: "Singapore Airlines", iataCode: "SQ", icaoCode: "SIA", country: "Singapore" },
+    { airlineName: "Royal Jordanian",    iataCode: "RJ", icaoCode: "RJA", country: "Jordan" },
+    { airlineName: "Lufthansa",          iataCode: "LH", icaoCode: "DLH", country: "Germany" },
+    { airlineName: "Air India",          iataCode: "AI", icaoCode: "AIC", country: "India" },
+    { airlineName: "KLM",                iataCode: "KL", icaoCode: "KLM", country: "Netherlands" },
   ]
   for (const a of airlineSeeds) {
     const exists = await prisma.airline.findFirst({ where: { iataCode: a.iataCode, companyId: null } })
@@ -94,11 +151,20 @@ async function main() {
   }
   const airlines = await prisma.airline.findMany({ where: { iataCode: { in: airlineSeeds.map(a => a.iataCode) }, companyId: null } }) as Array<{ id: string }>
 
+  // Class list matches the client's original CRM's class dropdown exactly.
   const classSeeds = [
-    { name: "Economy",         code: "Y" },
-    { name: "Premium Economy", code: "W" },
-    { name: "Business",        code: "J" },
-    { name: "First Class",     code: "F" },
+    { name: "Basic Economy",       code: "BE" },
+    { name: "Economy",             code: "Y" },
+    { name: "Premium Economy",     code: "W" },
+    { name: "Economy Plus",        code: "EP" },
+    { name: "Comfort+",            code: "CP" },
+    { name: "Economy Extra",       code: "EX" },
+    { name: "Business",            code: "J" },
+    { name: "First Class",         code: "F" },
+    { name: "Main Cabin",          code: "MC" },
+    { name: "Delta Main Classic",  code: "DC" },
+    { name: "Business Basic",      code: "BB" },
+    { name: "Economy Flex",        code: "EF" },
   ]
   for (const c of classSeeds) {
     const exists = await prisma.bookingClass.findFirst({ where: { code: c.code, companyId: null } })
@@ -107,9 +173,10 @@ async function main() {
   const classes = await prisma.bookingClass.findMany({ where: { code: { in: classSeeds.map(c => c.code) }, companyId: null } }) as Array<{ id: string }>
 
   const providerSeeds = [
-    { name: "Amadeus", logoUrl: null as string | null },
-    { name: "Sabre",   logoUrl: null as string | null },
-    { name: "Galileo", logoUrl: null as string | null },
+    { name: "Aerodeals", logoUrl: null as string | null },
+    { name: "Amadeus",   logoUrl: null as string | null },
+    { name: "Sabre",     logoUrl: null as string | null },
+    { name: "Galileo",   logoUrl: null as string | null },
   ]
   for (const p of providerSeeds) {
     const exists = await prisma.provider.findFirst({ where: { name: p.name, companyId: null } })
@@ -171,33 +238,76 @@ async function main() {
       const gross        = 15_000 + (i * 733) % 40_000 // in minor units (cents)
       const net          = Math.round(gross * 0.87)
 
-      const booking = await prisma.booking.create({
+      // Booking row first — bidNumber/reference generated the same way
+      // BookingsService.create() does (sequence -> format -> update).
+      const created = await prisma.booking.create({
         data: {
-          companyId:       company.id,
-          reference:       `BK-${String(i + 1).padStart(5, "0")}`,
-          pnr:             `PNR${(1000 + i * 37).toString(36).toUpperCase()}`,
-          passengerName:   PASSENGERS[i],
-          passengerEmail:  `${PASSENGERS[i].toLowerCase().replace(/\s+/g, ".")}@example.com`,
-          passengerPhone:  `+1555${String(1000000 + i * 91).slice(0, 7)}`,
+          companyId:    company.id,
+          reference:    "PENDING",
+          pnr:          `PNR${(1000 + i * 37).toString(36).toUpperCase()}`,
+          customerEmail: `${PASSENGERS[i].toLowerCase().replace(/\s+/g, ".")}@example.com`,
           status,
-          airlineId:       airline.id,
-          classId:         bookingClass.id,
-          providerId:      provider.id,
-          cardProcessorId: processor.id,
-          currencyId:      currency.id,
-          callQueueId:     i % 3 === 0 ? callQueue.id : null,
-          assignedToId:    assignedTo?.id,
-          createdById:     createdBy.id,
-          grossAmount:     gross,
-          netAmount:       net,
-          travelDate:      i % 2 === 0 ? daysFromNow(5 + i) : daysAgo(5 + i),
-          returnDate:      i % 3 === 0 ? daysFromNow(12 + i) : null,
-          notes:           i % 4 === 0 ? "Passenger requested aisle seat where possible." : null,
-          isUrgent:        i % 6 === 0,
-          createdAt:       daysAgo(60 - i * 1.5),
+          providerId:   provider.id,
+          callQueueId:  i % 3 === 0 ? callQueue.id : null,
+          assignedToId: assignedTo?.id,
+          createdById:  createdBy.id,
+          isUrgent:     i % 6 === 0,
+          createdAt:    daysAgo(60 - i * 1.5),
         },
       })
+      const reference = `BID${created.bidNumber}`
+      const booking = await prisma.booking.update({ where: { id: created.id }, data: { reference } })
       bookings.push(booking)
+
+      // Charges & Fees — one charge per booking in this demo dataset.
+      await prisma.charge.create({
+        data: { bookingId: booking.id, chargeNumber: 1, amount: gross, currencyId: currency.id, description: `Base fare — ${reference}` },
+      })
+
+      // Itinerary Details — one outbound segment; every third booking also
+      // gets a return segment, matching the client's One Way/Round Trip mix.
+      const [firstName, ...rest] = PASSENGERS[i].split(" ")
+      const lastName = rest.join(" ") || "-"
+      const departureAt = i % 2 === 0 ? daysFromNow(5 + i) : daysAgo(5 + i)
+      const returnAt     = i % 3 === 0 ? daysFromNow(12 + i) : null
+      await prisma.itinerarySegment.create({
+        data: {
+          bookingId: booking.id, direction: "OUTBOUND", segmentNumber: 1,
+          airlineId: airline.id, flightNumber: String(1000 + i), fromText: "USA", toText: "INDIA",
+          departureAt, arrivalAt: new Date(departureAt.getTime() + 8 * 3_600_000),
+          classId: bookingClass.id, pnrConfirmation: `PNR${(1000 + i * 37).toString(36).toUpperCase()}`,
+        },
+      })
+      if (returnAt) {
+        await prisma.itinerarySegment.create({
+          data: {
+            bookingId: booking.id, direction: "RETURN", segmentNumber: 1,
+            airlineId: airline.id, flightNumber: String(2000 + i), fromText: "INDIA", toText: "USA",
+            departureAt: returnAt, arrivalAt: new Date(returnAt.getTime() + 8 * 3_600_000),
+            classId: bookingClass.id,
+          },
+        })
+      }
+
+      // Passenger Details — primary adult passenger.
+      await prisma.passenger.create({
+        data: { bookingId: booking.id, passengerNumber: 1, type: "ADULT", firstName, lastName },
+      })
+
+      // Billing & Payment — PCI-safe by construction: only cardLast4 exists
+      // as a column at all, no raw PAN, no CVV, matching BillingDetail's
+      // schema (see schema.prisma comment on that model).
+      await prisma.billingDetail.create({
+        data: {
+          bookingId: booking.id, cardHolderName: `${firstName} ${lastName}`.toUpperCase(),
+          cardProcessorId: processor.id, cardLast4: String(1000 + i * 37).slice(-4),
+          expiryMonth: (i % 12) + 1, expiryYear: 2027 + (i % 3),
+          billingEmail: `${PASSENGERS[i].toLowerCase().replace(/\s+/g, ".")}@example.com`,
+          billingContactNo: `+1555${String(1000000 + i * 91).slice(0, 7)}`,
+          billingCity: "Columbia", billingState: "SC", billingZip: "29223", billingCountry: "USA",
+          purchaseDate: daysAgo(60 - i * 1.5),
+        },
+      })
 
       // Every booking has exactly one BookingTransaction (Transaction #1) —
       // the seed script creates bookings directly via Prisma rather than
@@ -298,14 +408,14 @@ async function main() {
 
     // ── Notifications ────────────────────────────────────
     const notifSeeds: Array<{ title: string; body: string; severity: "INFO" | "SUCCESS" | "WARNING" | "ERROR" }> = [
-      { title: "New booking created",       body: "Booking BK-00001 was created for Olivia Bennett.", severity: "INFO" },
-      { title: "Payment confirmed",         body: "Payment for BK-00003 was successfully processed.", severity: "SUCCESS" },
-      { title: "Chargeback filed",          body: "A chargeback was filed against booking BK-00013.", severity: "WARNING" },
-      { title: "Refund processed",          body: "Refund for booking BK-00009 has been processed.",  severity: "SUCCESS" },
-      { title: "Booking cancelled",         body: "Booking BK-00007 was cancelled by the passenger.", severity: "WARNING" },
+      { title: "New booking created",       body: `Booking ${bookings[0]?.reference} was created for Olivia Bennett.`, severity: "INFO" },
+      { title: "Payment confirmed",         body: `Payment for ${bookings[2]?.reference} was successfully processed.`, severity: "SUCCESS" },
+      { title: "Chargeback filed",          body: `A chargeback was filed against booking ${bookings[12]?.reference}.`, severity: "WARNING" },
+      { title: "Refund processed",          body: `Refund for booking ${bookings[8]?.reference} has been processed.`,  severity: "SUCCESS" },
+      { title: "Booking cancelled",         body: `Booking ${bookings[6]?.reference} was cancelled by the passenger.`, severity: "WARNING" },
       { title: "Failed login attempt",      body: "A failed login attempt was detected from a new IP address.", severity: "ERROR" },
       { title: "Weekly revenue summary",    body: "Your weekly revenue report is ready to view.",      severity: "INFO" },
-      { title: "MCO issued",                body: "An MCO was issued for booking BK-00004.",           severity: "INFO" },
+      { title: "MCO issued",                body: `An MCO was issued for booking ${bookings[3]?.reference}.`,           severity: "INFO" },
       { title: "IP rule updated",           body: "A new IP allow rule was added to Security settings.", severity: "INFO" },
       { title: "Card processor delay",      body: "Stripe reported a temporary delay processing payments.", severity: "WARNING" },
     ]
@@ -340,15 +450,15 @@ async function main() {
     // ── Activity log ─────────────────────────────────────
     const activitySeeds: Array<{ action: "CREATE" | "UPDATE" | "DELETE" | "LOGIN"; entityType: string; label: string }> = [
       { action: "LOGIN",  entityType: "Session", label: "admin@demo.com" },
-      { action: "CREATE", entityType: "Booking", label: "BK-00001" },
-      { action: "CREATE", entityType: "Booking", label: "BK-00002" },
-      { action: "UPDATE", entityType: "Booking", label: "BK-00003" },
+      { action: "CREATE", entityType: "Booking", label: `${bookings[0]?.reference}` },
+      { action: "CREATE", entityType: "Booking", label: `${bookings[1]?.reference}` },
+      { action: "UPDATE", entityType: "Booking", label: `${bookings[2]?.reference}` },
       { action: "CREATE", entityType: "Airline", label: "Emirates" },
       { action: "LOGIN",  entityType: "Session", label: "manager@demo.com" },
-      { action: "UPDATE", entityType: "Booking", label: "BK-00007" },
-      { action: "DELETE", entityType: "Booking", label: "BK-00020" },
-      { action: "CREATE", entityType: "Refund",  label: "BK-00009" },
-      { action: "CREATE", entityType: "Chargeback", label: "BK-00013" },
+      { action: "UPDATE", entityType: "Booking", label: `${bookings[6]?.reference}` },
+      { action: "DELETE", entityType: "Booking", label: `${bookings[19]?.reference ?? 'N/A'}` },
+      { action: "CREATE", entityType: "Refund",  label: `${bookings[8]?.reference}` },
+      { action: "CREATE", entityType: "Chargeback", label: `${bookings[12]?.reference}` },
     ]
     for (const [i, a] of activitySeeds.entries()) {
       const actor = i % 3 === 0 ? manager : admin

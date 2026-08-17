@@ -1,9 +1,11 @@
 import type { User } from './user.types'
 export type BookingStatus = 'PENDING'|'CONFIRMED'|'TICKETED'|'CANCELLED'|'REFUNDED'|'CHARGEBACK'
-export type BookingSearchField = 'reference'|'passengerName'|'passengerEmail'|'passengerPhone'|'pnr'
+export type BookingSearchField = 'reference'|'bidNumber'|'passengerName'|'customerEmail'|'pnr'
 export type TransactionType =
   | 'NEW_BOOKING' | 'CANCEL_FOR_REFUND' | 'CANCEL_FOR_FUTURE_CREDIT' | 'EXCHANGE'
   | 'UPGRADE' | 'BAGGAGE_ADDON' | 'EXTRA_ADDON' | 'SEAT_ASSIGNMENT' | 'TICKET_REISSUANCE'
+export type PassengerType = 'ADULT' | 'CHILD' | 'INFANT_ON_SEAT' | 'INFANT_ON_LAP'
+export type ItineraryDirection = 'OUTBOUND' | 'RETURN'
 
 export const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
   NEW_BOOKING: 'New Booking',
@@ -27,30 +29,99 @@ export const TRANSACTION_TYPE_DESCRIPTIONS: Record<TransactionType, string> = {
   SEAT_ASSIGNMENT: 'Assign or change seat selection',
   TICKET_REISSUANCE: 'Reissue ticket with updated information',
 }
+export const PASSENGER_TYPE_LABELS: Record<PassengerType, string> = {
+  ADULT: 'Adult', CHILD: 'Child', INFANT_ON_SEAT: 'Infant On Seat', INFANT_ON_LAP: 'Infant On Lap',
+}
 
 export interface BookingTransaction {
   id: string; transactionNumber: number; transactionType: TransactionType; status: string
 }
 
+export type BookingVerificationStatus = 'PENDING' | 'VERIFIED' | 'EXPIRED'
+
+export interface BookingVerification {
+  id: string; status: BookingVerificationStatus; clientEmail: string
+  verifiedAt: string | null; expiresAt: string; createdAt: string
+}
+
+export interface Charge {
+  id: string; chargeNumber: number; amount: number; currencyId: string; description: string | null
+  currency?: { id: string; code: string; symbol: string; decimalPlaces: number }
+}
+
+export interface ItinerarySegment {
+  id: string; direction: ItineraryDirection; segmentNumber: number; airlineId: string
+  flightNumber: string; fromText: string; toText: string; departureAt: string; arrivalAt: string
+  classId: string; pnrConfirmation: string | null
+  airline?: { id: string; airlineName: string; iataCode: string }
+  class?: { id: string; name: string; code: string }
+}
+
+export interface Passenger {
+  id: string; passengerNumber: number; type: PassengerType
+  firstName: string; middleName: string | null; lastName: string
+  dob: string | null; ticketNumber: string | null
+}
+
+export interface BillingDetail {
+  id: string; cardHolderName: string; cardLast4: string; expiryMonth: number; expiryYear: number
+  billingEmail: string; billingContactNo: string
+  billingStreet: string | null; billingCity: string | null; billingState: string | null
+  billingZip: string | null; billingCountry: string | null; purchaseDate: string
+  cardProcessor?: { id: string; name: string }
+}
+
+export interface Attachment {
+  id: string; fileUrl: string; fileName: string; createdAt: string
+}
+
 export interface Booking {
-  id: string; companyId: string; reference: string; pnr: string; passengerName: string;
-  passengerEmail: string|null; passengerPhone: string|null; status: BookingStatus;
-  airlineId: string; classId: string; providerId: string; cardProcessorId: string;
-  currencyId: string; callQueueId: string|null; assignedToId: string|null; createdById: string;
-  grossAmount: number; netAmount: number; travelDate: string; returnDate: string|null;
-  notes: string|null; isUrgent?: boolean; createdAt: string; updatedAt: string;
-  airline?: { id: string; airlineName: string; iataCode: string };
-  class?: { id: string; name: string; code: string };
+  id: string; companyId: string; bidNumber: number; reference: string; pnr: string | null;
+  customerEmail: string; status: BookingStatus;
+  providerId: string; callQueueId: string|null; assignedToId: string|null; createdById: string;
+  isUrgent?: boolean; createdAt: string; updatedAt: string; version: number;
   provider?: { id: string; name: string };
-  cardProcessor?: { id: string; name: string };
-  currency?: { id: string; code: string; symbol: string; decimalPlaces: number };
   assignedTo?: User|null; createdBy?: User;
+  passengers?: Passenger[]
+  segments?: ItinerarySegment[]
+  charges?: Charge[]
+  billing?: BillingDetail | null
+  attachments?: Attachment[]
   // Latest transaction (today, always Transaction #1) — see IMPLEMENTATION.md
   // "Booking transaction architecture" for why this is an array of at most one.
   transactions?: BookingTransaction[]
+  // Latest client authorization request, if any has ever been sent — same
+  // "array of at most one, take latest" convention as `transactions`.
+  verifications?: BookingVerification[]
 }
+
 export interface BookingFilters {
-  status?: BookingStatus; airline_id?: string; provider_id?: string;
-  card_processor_id?: string; assigned_to_id?: string; date_from?: string; date_to?: string; search?: string;
-  search_field?: 'reference'|'passengerName'|'passengerEmail'|'passengerPhone'|'pnr'; is_urgent?: boolean
+  status?: BookingStatus; provider_id?: string; assigned_to_id?: string;
+  date_from?: string; date_to?: string; search?: string;
+  search_field?: BookingSearchField; is_urgent?: boolean
+}
+
+// ── Create Booking wizard input shapes — mirror the backend DTOs exactly ──
+export interface ChargeInput { chargeNumber: number; amount: number; currencyId: string; description?: string }
+export interface ItinerarySegmentInput {
+  direction?: ItineraryDirection; segmentNumber: number; airlineId: string; flightNumber: string
+  fromText: string; toText: string; departureAt: string; arrivalAt: string; classId: string; pnrConfirmation?: string
+}
+export interface PassengerInput {
+  passengerNumber: number; type: PassengerType; firstName: string; middleName?: string; lastName: string
+  dob?: string; ticketNumber?: string
+}
+export interface BillingInput {
+  cardHolderName: string; cardProcessorId: string; cardLast4: string
+  expiryMonth: number; expiryYear: number; billingEmail: string; billingContactNo: string
+  billingStreet?: string; billingCity?: string; billingState?: string; billingZip?: string; billingCountry?: string
+  purchaseDate?: string
+}
+export interface AttachmentInput { fileUrl: string; fileName: string }
+
+export interface CreateBookingInput {
+  providerId: string; callQueueId?: string; customerEmail: string; pnr?: string
+  status?: BookingStatus; assignedToId?: string; isUrgent?: boolean; transactionType?: TransactionType
+  charges: ChargeInput[]; segments: ItinerarySegmentInput[]; passengers: PassengerInput[]
+  billing: BillingInput; attachments?: AttachmentInput[]; specialDetails?: Record<string, unknown>
 }

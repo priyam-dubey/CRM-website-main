@@ -1,5 +1,5 @@
 import { apiClient } from "@/lib/api-client"
-import type { Booking, BookingFilters } from "@/types/booking.types"
+import type { Booking, BookingFilters, CreateBookingInput } from "@/types/booking.types"
 import type { PaginatedResponse, PaginationParams } from "@/types/api.types"
 
 export const bookingService = {
@@ -9,7 +9,7 @@ export const bookingService = {
   get: (id: string) =>
     apiClient.get<{ data: Booking }>(`/bookings/${id}`).then(r => r.data.data),
 
-  create: (data: Record<string, unknown>) =>
+  create: (data: CreateBookingInput) =>
     apiClient.post<{ data: Booking }>("/bookings", data).then(r => r.data.data),
 
   update: (id: string, data: Record<string, unknown>) =>
@@ -26,4 +26,9 @@ export const bookingService = {
 
   bulkAssign: (ids: string[], assignedToId: string | null) =>
     apiClient.post<{ data: { updated: number } }>("/bookings/bulk-assign", { ids, assignedToId }).then(r => r.data.data),
+
+  sendVerification: (id: string) =>
+    apiClient.post<{ data: { id: string; status: string; clientEmail: string; createdAt: string } }>(
+      `/bookings/${id}/send-verification`,
+    ).then(r => r.data.data),
 }

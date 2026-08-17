@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, Query, HttpCode, HttpStatus } from "@nestjs/common"
 import { BookingsService }    from "./bookings.service"
+import { BookingVerificationService } from "./booking-verification.service"
 import { CreateBookingDto }   from "./dto/create-booking.dto"
 import { UpdateBookingDto }   from "./dto/update-booking.dto"
 import { BookingFiltersDto }  from "./dto/booking-filters.dto"
@@ -11,7 +12,10 @@ import type { JwtPayload }    from "../../shared/types/request.types"
 
 @Controller("bookings")
 export class BookingsController {
-  constructor(private readonly bookingsService: BookingsService) {}
+  constructor(
+    private readonly bookingsService: BookingsService,
+    private readonly verificationService: BookingVerificationService,
+  ) {}
 
   @Get()
   @RequirePermission("bookings", "view")
@@ -53,6 +57,14 @@ export class BookingsController {
   @RequirePermission("bookings", "edit")
   cancel(@Param() params: IdParamDto, @CurrentUser() user: JwtPayload) {
     return this.bookingsService.cancel(params.id, user.companyId, user)
+  }
+
+  // Same permission as cancel/update: sending a booking for client
+  // verification is a booking-mutating action, gated the same way.
+  @Post(":id/send-verification")
+  @RequirePermission("bookings", "edit")
+  sendVerification(@Param() params: IdParamDto, @CurrentUser() user: JwtPayload) {
+    return this.verificationService.sendVerification(params.id, user.companyId, user)
   }
 
   @Delete(":id")

@@ -94,38 +94,39 @@ export const MOCK_BOOKINGS: Booking[] = Array.from({ length: 80 }, (_, i) => {
   const proc = MOCK_CARD_PROCESSORS[i % 2]
   const cur = MOCK_CURRENCIES[i % 4]
   const user = MOCK_USERS[i % 4]
+  const [firstName, ...rest] = PASSENGER_NAMES[i % PASSENGER_NAMES.length].split(" ")
   const travelDaysFromNow = Math.floor(Math.random() * 180) - 30
   const travel = new Date(); travel.setDate(travel.getDate() + travelDaysFromNow)
   return {
-    id, companyId: 'company-1',
-    reference: `BK-2025-${String(i + 1001).padStart(5,'0')}`,
+    id, companyId: 'company-1', bidNumber: i + 1001,
+    reference: `BID${i + 1001}`,
     pnr: `PNR${Math.random().toString(36).substring(2,8).toUpperCase()}`,
-    passengerName: PASSENGER_NAMES[i % PASSENGER_NAMES.length],
-    passengerEmail: `pax${i}@email.com`,
-    passengerPhone: `+1555${String(Math.floor(Math.random()*9000000)+1000000)}`,
-    status, airlineId: airline.id, classId: cls.id, providerId: prov.id,
-    cardProcessorId: proc.id, currencyId: cur.id,
+    customerEmail: `pax${i}@email.com`,
+    status, providerId: prov.id,
     callQueueId: i % 5 === 0 ? 'cq-1' : null,
-    assignedToId: user.id, createdById: 'user-1',
-    grossAmount, netAmount: Math.floor(grossAmount * 0.85),
-    travelDate: travel.toISOString(),
-    returnDate: i % 3 !== 0 ? new Date(travel.getTime() + 7*86400000).toISOString() : null,
-    notes: i % 7 === 0 ? 'Passenger requested window seat' : null,
+    assignedToId: user.id, createdById: 'user-1', version: 0,
     createdAt: rDate(Math.floor(Math.random() * 90)),
     updatedAt: rDate(Math.floor(Math.random() * 10)),
-    airline, class: cls, provider: prov, cardProcessor: proc, currency: cur,
-    createdBy: MOCK_USERS[0], assignedTo: user,
+    provider: prov, createdBy: MOCK_USERS[0], assignedTo: user,
+    passengers: [{ id: `pax-${id}`, passengerNumber: 1, type: 'ADULT' as const, firstName, middleName: null, lastName: rest.join(' ') || '-', dob: null, ticketNumber: null }],
+    segments: [{
+      id: `seg-${id}`, direction: 'OUTBOUND' as const, segmentNumber: 1, airlineId: airline.id,
+      flightNumber: String(1000 + i), fromText: 'USA', toText: 'INDIA',
+      departureAt: travel.toISOString(), arrivalAt: new Date(travel.getTime() + 8*3600000).toISOString(),
+      classId: cls.id, pnrConfirmation: null, airline, class: cls,
+    }],
+    charges: [{ id: `chg-${id}`, chargeNumber: 1, amount: grossAmount, currencyId: cur.id, description: null, currency: cur }],
   }
 })
 
 export const MOCK_REVENUE: Revenue[] = MOCK_BOOKINGS.slice(0, 40).map((b, i) => ({
   id: `rev-${i+1}`, companyId: 'company-1', bookingId: b.id,
-  currencyId: b.currencyId, type: 'FARE' as const,
-  grossAmount: b.grossAmount, netAmount: b.netAmount,
+  currencyId: b.charges![0].currencyId, type: 'FARE' as const,
+  grossAmount: b.charges![0].amount, netAmount: Math.floor(b.charges![0].amount * 0.85),
   description: `Fare revenue for ${b.reference}`,
   entryDate: b.createdAt, createdById: 'user-1',
   createdAt: b.createdAt, updatedAt: b.updatedAt,
-  currency: b.currency,
+  currency: b.charges![0].currency,
 }))
 
 export const MOCK_CHARGEBACKS: Chargeback[] = [

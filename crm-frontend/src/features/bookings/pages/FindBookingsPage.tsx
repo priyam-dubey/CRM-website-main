@@ -12,13 +12,12 @@ import { useDebounce } from "@/hooks/useDebounce"
 import { BOOKING_STATUS_COLORS, BOOKING_STATUS_LABELS } from "@/config/constants"
 import { TRANSACTION_TYPE_LABELS } from "@/types/booking.types"
 import type { BookingSearchField } from "@/types/booking.types"
-import { cn } from "@/lib/utils"
+import { formatDate, formatTravelUrgency, cn } from "@/lib/utils"
 
 const SEARCH_FIELDS: { value: BookingSearchField; label: string }[] = [
   { value: "reference",      label: "Booking ID" },
-  { value: "passengerName",  label: "CCH Name" },
-  { value: "passengerEmail", label: "Email" },
-  { value: "passengerPhone", label: "Billing Phone" },
+  { value: "passengerName",  label: "Passenger Name" },
+  { value: "customerEmail",  label: "Customer Email" },
   { value: "pnr",            label: "PNR" },
 ]
 
@@ -112,6 +111,14 @@ export default function FindBookingsPage() {
                       </Badge>
                       {latestTxn && (
                         <Badge variant="info">{TRANSACTION_TYPE_LABELS[latestTxn.transactionType]}</Badge>
+                      )}
+                      {tab === "urgent" && b.segments?.[0] && (
+                        <span className="flex flex-col items-end leading-tight ml-1">
+                          <span className="text-xs font-medium text-slate-700">
+                            Travel Date: {formatDate(b.segments[0].departureAt)}
+                          </span>
+                          <Badge variant="warning">{formatTravelUrgency(b.segments[0].departureAt)}</Badge>
+                        </span>
                       )}
                       <span className="text-xs text-slate-400 ml-2">
                         Created by: {b.createdBy ? `${b.createdBy.firstName} ${b.createdBy.lastName}` : "—"}

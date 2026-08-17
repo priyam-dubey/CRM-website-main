@@ -1,18 +1,25 @@
+import { useState } from "react"
 import { useParams, useNavigate } from "react-router-dom"
-import { ArrowLeft, Edit, Plane, User, Clock, StickyNote } from "lucide-react"
+import { ArrowLeft, Edit, Plane, User, Clock, StickyNote, ShieldCheck, Send, Mail, RefreshCw } from "lucide-react"
+import { toast } from "sonner"
+import { useMutation } from "@tanstack/react-query"
 import { PageHeader }        from "@/components/app/PageHeader"
 import { Button }            from "@/components/ui/Button"
 import { Badge }             from "@/components/ui/Badge"
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/DropdownMenu"
+import { Drawer, DrawerContent, DrawerHeader, DrawerBody, DrawerTitle } from "@/components/ui/Drawer"
 import { Skeleton }          from "@/components/ui/Skeleton"
 import { ErrorState }        from "@/components/app/ErrorState"
 import { ActivityTimeline }  from "@/components/app/ActivityTimeline"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/Tabs"
 import { BookingNotesTab }   from "@/features/bookings/components/BookingNotesTab"
 import { useBooking, useCancelBooking } from "@/features/bookings/hooks/useBookings"
 import { useActivity }       from "@/features/activity/hooks/useActivity"
+import { bookingService }    from "@/services/booking.service"
+import { getErrorMessage }   from "@/lib/api-client"
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils"
 import { BOOKING_STATUS_COLORS, BOOKING_STATUS_LABELS } from "@/config/constants"
 import { usePermission }     from "@/hooks/usePermission"
+import { PASSENGER_TYPE_LABELS } from "@/types/booking.types"
 import type { BadgeProps }   from "@/components/ui/Badge"
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
@@ -32,6 +39,13 @@ export default function BookingDetailPage() {
   const { data: booking, isLoading, isError, refetch } = useBooking(id!)
   const { data: activityData, isLoading: loadingActivity } = useActivity({ limit: 10 })
   const cancelBooking = useCancelBooking()
+  const [remarksOpen, setRemarksOpen] = useState(false)
+  const [activityOpen, setActivityOpen] = useState(false)
+  const sendVerification = useMutation({
+    mutationFn: () => bookingService.sendVerification(id!),
+    onSuccess: () => { toast.success("Verification email sent"); refetch() },
+    onError:   (err) => toast.error(getErrorMessage(err)),
+  })
 
   if (isLoading) return (
     <div className="space-y-6">
@@ -57,6 +71,24 @@ export default function BookingDetailPage() {
     />
   )
 
+  const chargesTotal = (booking.charges ?? []).reduce((s, c) => s + c.amount, 0)
+  const primaryCurrencyCode = booking.charges?.[0]?.currency?.code ?? "USD"
+  const firstSegment  = (booking.segments ?? []).find(s => s.direction === "OUTBOUND") ?? booking.segments?.[0]
+  const returnSegment = (booking.segments ?? []).find(s => s.direction === "RETURN")
+
+  // "Auth Status" relabels BookingVerification.status for the CRM UI —
+  // VERIFIED reads as "Authorized" here to match the client's original CRM
+  // terminology, without a schema/enum-value migration (see schema.prisma
+  // comment on BookingVerification.status).
+  const latestVerification = booking.verifications?.[0]
+  const authStatusLabel: string =
+    latestVerification?.status === "VERIFIED" ? "Authorized" :
+    latestVerification?.status === "EXPIRED"  ? "Expired" :
+    latestVerification ? "Pending" : "Not Sent"
+  const authStatusVariant: BadgeProps["variant"] =
+    latestVerification?.status === "VERIFIED" ? "success" :
+    latestVerification?.status === "EXPIRED"  ? "error" : "warning"
+
   return (
     <div className="space-y-6">
       {/* Top bar */}
@@ -70,6 +102,15 @@ export default function BookingDetailPage() {
           className="mb-0 flex-1"
           actions={
             <div className="flex gap-2">
+              <Button variant="outline" size="sm" leftIcon={<StickyNote className="h-4 w-4" />} onClick={() => setRemarksOpen(true)}>
+                Remarks
+              </Button>
+              <Button variant="outline" size="sm" leftIcon={<Clock className="h-4 w-4" />} onClick={() => setActivityOpen(true)}>
+                Activity
+              </Button>
+              <Button variant="outline" size="sm" leftIcon={<RefreshCw className="h-4 w-4" />} onClick={() => refetch()}>
+                Refresh
+              </Button>
               {canEdit && booking.status !== "CANCELLED" && booking.status !== "REFUNDED" && (
                 <Button
                   variant="outline" size="sm"
@@ -87,6 +128,32 @@ export default function BookingDetailPage() {
                   Edit Booking
                 </Button>
               )}
+              {canEdit && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" leftIcon={<Mail className="h-4 w-4" />}>Email</Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={() => sendVerification.mutate()}
+                      disabled={!booking.customerEmail || sendVerification.isPending}
+                    >
+                      Auth
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => toast.info("Manual email composer isn't wired up yet.")}>
+                      Send Manual Email
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+              {canEdit && (
+                <Button
+                  variant="outline" size="sm"
+                  onClick={() => toast.info("Create Revision isn't implemented yet — every booking currently supports exactly one transaction. See IMPLEMENTATION.md.")}
+                >
+                  Create Revision
+                </Button>
+              )}
             </div>
           }
         />
@@ -99,106 +166,141 @@ export default function BookingDetailPage() {
           <div className="bg-white rounded-md border border-slate-200 shadow-sm p-5">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base font-semibold text-slate-900">Booking Status</h2>
-              <Badge variant={BOOKING_STATUS_COLORS[booking.status] as BadgeProps["variant"]} dot>
-                {BOOKING_STATUS_LABELS[booking.status]}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant={BOOKING_STATUS_COLORS[booking.status] as BadgeProps["variant"]} dot>
+                  Bid Status: {BOOKING_STATUS_LABELS[booking.status]}
+                </Badge>
+                <Badge variant={authStatusVariant} dot>
+                  Auth Status: {authStatusLabel}
+                </Badge>
+              </div>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              <InfoRow label="Gross Amount"
-                value={formatCurrency(booking.grossAmount, booking.currency?.code ?? "USD")} />
-              <InfoRow label="Net Amount"
-                value={formatCurrency(booking.netAmount, booking.currency?.code ?? "USD")} />
-              <InfoRow label="Currency"     value={booking.currency?.code} />
-              <InfoRow label="Travel Date"  value={formatDate(booking.travelDate)} />
-              <InfoRow label="Return Date"
-                value={booking.returnDate ? formatDate(booking.returnDate) : "One-way"} />
+              <InfoRow label="BID"          value={booking.reference} />
+              <InfoRow label="Total"
+                value={formatCurrency(chargesTotal, primaryCurrencyCode)} />
+              <InfoRow label="Currency"     value={primaryCurrencyCode} />
+              <InfoRow label="Travel Date"  value={firstSegment ? formatDate(firstSegment.departureAt) : "—"} />
+              <InfoRow label="Return"
+                value={returnSegment ? formatDate(returnSegment.departureAt) : "One-way"} />
               <InfoRow label="Created"      value={formatDateTime(booking.createdAt)} />
             </div>
           </div>
 
-          {/* Passenger */}
+          {/* Client Verification */}
+          <div className="bg-white rounded-md border border-slate-200 shadow-sm p-5">
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="text-base font-semibold text-slate-900 flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-slate-400" /> Client Verification
+              </h2>
+              {booking.verifications?.[0]?.status === "VERIFIED" ? (
+                <Badge variant="success" dot>✓ Verified</Badge>
+              ) : (
+                <Badge variant="outline">Unverified</Badge>
+              )}
+            </div>
+            {booking.verifications?.[0]?.status === "VERIFIED" ? (
+              <p className="text-sm text-slate-500 mt-2">
+                Verified at {formatDateTime(booking.verifications[0].verifiedAt!)} by{" "}
+                {booking.verifications[0].clientEmail}
+              </p>
+            ) : (
+              <div className="flex items-center justify-between mt-3">
+                <p className="text-sm text-slate-500">
+                  {booking.verifications?.[0]?.status === "PENDING"
+                    ? `Verification email sent to ${booking.verifications[0].clientEmail} — awaiting client response.`
+                    : "Send the client an email to review and digitally sign this booking."}
+                </p>
+                {canEdit && (
+                  <Button
+                    variant="outline" size="sm"
+                    leftIcon={<Send className="h-3.5 w-3.5" />}
+                    onClick={() => sendVerification.mutate()}
+                    loading={sendVerification.isPending}
+                    disabled={!booking.customerEmail}
+                  >
+                    {booking.verifications?.[0]?.status === "PENDING" ? "Resend" : "Send for Verification"}
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Passengers */}
           <div className="bg-white rounded-md border border-slate-200 shadow-sm p-5">
             <h2 className="text-base font-semibold text-slate-900 mb-4 flex items-center gap-2">
-              <User className="h-4 w-4 text-slate-400" /> Passenger
+              <User className="h-4 w-4 text-slate-400" /> Passengers
             </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              <InfoRow label="Name"  value={booking.passengerName} />
-              <InfoRow label="Email" value={booking.passengerEmail} />
-              <InfoRow label="Phone" value={booking.passengerPhone} />
+            <div className="space-y-3">
+              {(booking.passengers ?? []).map(p => (
+                <div key={p.id} className="grid grid-cols-2 sm:grid-cols-4 gap-4 pb-3 border-b border-slate-100 last:border-0 last:pb-0">
+                  <InfoRow label="Name" value={[p.firstName, p.middleName, p.lastName].filter(Boolean).join(" ")} />
+                  <InfoRow label="Type" value={PASSENGER_TYPE_LABELS[p.type]} />
+                  <InfoRow label="DOB" value={p.dob ? formatDate(p.dob) : "—"} />
+                  <InfoRow label="Ticket #" value={p.ticketNumber} />
+                </div>
+              ))}
+              {!booking.passengers?.length && <p className="text-sm text-slate-400">No passengers on file.</p>}
+              <InfoRow label="Customer Email" value={booking.customerEmail} />
             </div>
           </div>
 
           {/* Flight details */}
           <div className="bg-white rounded-md border border-slate-200 shadow-sm p-5">
             <h2 className="text-base font-semibold text-slate-900 mb-4 flex items-center gap-2">
-              <Plane className="h-4 w-4 text-slate-400" /> Flight Details
+              <Plane className="h-4 w-4 text-slate-400" /> Itinerary
             </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              <InfoRow
-                label="Airline"
-                value={
-                  booking.airline ? (
-                    <span>{booking.airline.airlineName}
-                      <span className="ml-1 font-mono text-xs text-slate-400">
-                        ({booking.airline.iataCode})
-                      </span>
-                    </span>
-                  ) : "—"
-                }
-              />
-              <InfoRow label="Class"
-                value={booking.class ? `${booking.class.name} (${booking.class.code})` : "—"} />
-              <InfoRow label="Provider"   value={booking.provider?.name} />
-              <InfoRow label="Processor"  value={booking.cardProcessor?.name} />
-              <InfoRow
-                label="Assigned To"
-                value={booking.assignedTo
-                  ? `${booking.assignedTo.firstName} ${booking.assignedTo.lastName}`
-                  : "Unassigned"}
-              />
-              <InfoRow
-                label="Created By"
-                value={booking.createdBy
-                  ? `${booking.createdBy.firstName} ${booking.createdBy.lastName}`
-                  : "—"}
-              />
+            <div className="space-y-3">
+              {(booking.segments ?? []).map(s => (
+                <div key={s.id} className="grid grid-cols-2 sm:grid-cols-3 gap-4 pb-3 border-b border-slate-100 last:border-0 last:pb-0">
+                  <InfoRow label={s.direction === "OUTBOUND" ? "Outbound" : "Return"}
+                    value={s.airline ? `${s.airline.airlineName} (${s.airline.iataCode}) ${s.flightNumber}` : s.flightNumber} />
+                  <InfoRow label="Route" value={`${s.fromText} → ${s.toText}`} />
+                  <InfoRow label="Class" value={s.class ? `${s.class.name} (${s.class.code})` : "—"} />
+                  <InfoRow label="Departure" value={formatDateTime(s.departureAt)} />
+                  <InfoRow label="Arrival" value={formatDateTime(s.arrivalAt)} />
+                  <InfoRow label="PNR/Confirmation" value={s.pnrConfirmation} />
+                </div>
+              ))}
+              {!booking.segments?.length && <p className="text-sm text-slate-400">No itinerary on file.</p>}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-1">
+                <InfoRow label="Provider" value={booking.provider?.name} />
+                <InfoRow label="Assigned To" value={booking.assignedTo ? `${booking.assignedTo.firstName} ${booking.assignedTo.lastName}` : "Unassigned"} />
+                <InfoRow label="Created By" value={booking.createdBy ? `${booking.createdBy.firstName} ${booking.createdBy.lastName}` : "—"} />
+              </div>
             </div>
           </div>
 
-          {booking.notes && (
+          {/* Billing */}
+          {booking.billing && (
             <div className="bg-white rounded-md border border-slate-200 shadow-sm p-5">
-              <h2 className="text-sm font-semibold text-slate-500 mb-2">Booking Notes</h2>
-              <p className="text-sm text-slate-700 whitespace-pre-wrap">{booking.notes}</p>
+              <h2 className="text-base font-semibold text-slate-900 mb-4">Billing &amp; Payment</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                <InfoRow label="Card Holder" value={booking.billing.cardHolderName} />
+                <InfoRow label="Card" value={`${booking.billing.cardProcessor?.name ?? "Card"} •••• ${booking.billing.cardLast4}`} />
+                <InfoRow label="Expiry" value={`${String(booking.billing.expiryMonth).padStart(2, "0")}/${booking.billing.expiryYear}`} />
+                <InfoRow label="Billing Email" value={booking.billing.billingEmail} />
+                <InfoRow label="Contact No." value={booking.billing.billingContactNo} />
+                <InfoRow label="Purchase Date" value={formatDate(booking.billing.purchaseDate)} />
+              </div>
             </div>
           )}
 
-          {/* ── Tabbed section: Notes + Activity ────────────────────── */}
+          {/* Charges */}
           <div className="bg-white rounded-md border border-slate-200 shadow-sm p-5">
-            <Tabs defaultValue="notes">
-              <TabsList className="mb-4">
-                <TabsTrigger value="notes" className="flex items-center gap-1.5">
-                  <StickyNote className="h-3.5 w-3.5" />
-                  Internal Notes
-                </TabsTrigger>
-                <TabsTrigger value="activity" className="flex items-center gap-1.5">
-                  <Clock className="h-3.5 w-3.5" />
-                  Activity Log
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="notes">
-                <BookingNotesTab bookingId={id!} />
-              </TabsContent>
-
-              <TabsContent value="activity">
-                <ActivityTimeline
-                  events={activityData?.data ?? []}
-                  isLoading={loadingActivity}
-                  compact
-                />
-              </TabsContent>
-            </Tabs>
+            <h2 className="text-base font-semibold text-slate-900 mb-4">Charges &amp; Fees</h2>
+            <div className="space-y-2">
+              {(booking.charges ?? []).map(c => (
+                <div key={c.id} className="flex items-center justify-between text-sm">
+                  <span className="text-slate-500">#{c.chargeNumber} {c.description ?? ""}</span>
+                  <span className="font-medium tabular-nums">{formatCurrency(c.amount, c.currency?.code ?? "USD")}</span>
+                </div>
+              ))}
+              {!booking.charges?.length && <p className="text-sm text-slate-400">No charges on file.</p>}
+            </div>
           </div>
+
+          {/* ── Notes + Activity now live in slide-in drawers (see top action bar) ── */}
         </div>
 
         {/* ── Right column: quick-reference card ──────────────────────── */}
@@ -211,9 +313,9 @@ export default function BookingDetailPage() {
               {[
                 { label: "Reference",  value: booking.reference },
                 { label: "PNR",        value: booking.pnr },
-                { label: "Airline",    value: booking.airline?.airlineName },
+                { label: "Airline",    value: firstSegment?.airline?.airlineName },
                 { label: "Status",     value: BOOKING_STATUS_LABELS[booking.status] },
-                { label: "Gross",      value: formatCurrency(booking.grossAmount, booking.currency?.code) },
+                { label: "Total",      value: formatCurrency(chargesTotal, primaryCurrencyCode) },
               ].map(({ label, value }) => (
                 <div key={label} className="flex justify-between gap-2 text-sm">
                   <dt className="text-slate-500 shrink-0">{label}</dt>
@@ -224,6 +326,28 @@ export default function BookingDetailPage() {
           </div>
         </div>
       </div>
+
+      <Drawer open={remarksOpen} onOpenChange={setRemarksOpen}>
+        <DrawerContent className="w-full sm:w-[420px]">
+          <DrawerHeader>
+            <DrawerTitle>Remarks</DrawerTitle>
+          </DrawerHeader>
+          <DrawerBody>
+            <BookingNotesTab bookingId={id!} />
+          </DrawerBody>
+        </DrawerContent>
+      </Drawer>
+
+      <Drawer open={activityOpen} onOpenChange={setActivityOpen}>
+        <DrawerContent className="w-full sm:w-[420px]">
+          <DrawerHeader>
+            <DrawerTitle>Activity Log</DrawerTitle>
+          </DrawerHeader>
+          <DrawerBody>
+            <ActivityTimeline events={activityData?.data ?? []} isLoading={loadingActivity} compact />
+          </DrawerBody>
+        </DrawerContent>
+      </Drawer>
     </div>
   )
 }

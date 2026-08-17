@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
-import { format, formatDistanceToNow, parseISO } from 'date-fns'
+import { format, formatDistanceToNow, parseISO, differenceInCalendarDays } from 'date-fns'
 
 export function cn(...inputs: ClassValue[]) { return twMerge(clsx(inputs)) }
 
@@ -28,6 +28,19 @@ export function formatDateTime(date: string | Date): string {
 
 export function formatRelativeTime(date: string | Date): string {
   return formatDistanceToNow(typeof date === 'string' ? parseISO(date) : date, { addSuffix: true })
+}
+
+// Urgent Bookings label: how soon the travel date is, by CALENDAR day —
+// differenceInCalendarDays ignores time-of-day, so "today" and "tomorrow"
+// are correct regardless of what time the travel date carries or what time
+// it currently is. Deliberately based on travelDate only, never createdAt.
+export function formatTravelUrgency(date: string | Date): string {
+  const d = typeof date === 'string' ? parseISO(date) : date
+  const days = differenceInCalendarDays(d, new Date())
+  if (days < 0) return formatDate(d)
+  if (days === 0) return 'Today'
+  if (days === 1) return 'Tomorrow'
+  return `In ${days} days`
 }
 
 export function formatNumber(value: number): string { return new Intl.NumberFormat('en-US').format(value) }

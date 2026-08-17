@@ -4,7 +4,7 @@ import { APP_GUARD, APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from "@nestjs/core"
 import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler"
 import { EventEmitterModule } from "@nestjs/event-emitter"
 
-import { appConfig, databaseConfig, jwtConfig, throttleConfig } from "./config"
+import { appConfig, databaseConfig, jwtConfig, throttleConfig, emailConfig } from "./config"
 
 import { PrismaModule }         from "./database/prisma.module"
 import { EventsModule }         from "./events/events.module"
@@ -35,7 +35,7 @@ import { LoggerMiddleware }      from "./common/middleware/logger.middleware"
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load:     [appConfig, databaseConfig, jwtConfig, throttleConfig],
+      load:     [appConfig, databaseConfig, jwtConfig, throttleConfig, emailConfig],
     }),
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
     EventEmitterModule.forRoot({ wildcard: true }),

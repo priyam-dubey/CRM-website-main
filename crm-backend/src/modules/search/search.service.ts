@@ -15,12 +15,19 @@ export class SearchService {
         where: {
           companyId, deletedAt: null,
           OR: [
-            { passengerName: { contains: search, mode: "insensitive" } },
             { reference:     { contains: search, mode: "insensitive" } },
             { pnr:           { contains: search, mode: "insensitive" } },
+            { customerEmail: { contains: search, mode: "insensitive" } },
+            { passengers: { some: { OR: [
+              { firstName: { contains: search, mode: "insensitive" } },
+              { lastName:  { contains: search, mode: "insensitive" } },
+            ] } } },
           ],
         },
-        select: { id: true, reference: true, passengerName: true, status: true, pnr: true },
+        select: {
+          id: true, reference: true, status: true, pnr: true,
+          passengers: { select: { firstName: true, lastName: true }, orderBy: { passengerNumber: "asc" }, take: 1 },
+        },
         take: 5,
       }),
       this.prisma.user.findMany({
