@@ -5,8 +5,8 @@ import { NAV_GROUPS, BOTTOM_NAV_ITEMS, type NavItem } from '@/config/navigation'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { Avatar } from '@/components/ui/Avatar'
+import { Logo } from '@/components/app/Logo'
 import { cn } from '@/lib/utils'
-import { APP_NAME } from '@/config/constants'
 
 function NavItemRow({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
   const location = useLocation()
@@ -63,10 +63,10 @@ export function Sidebar({ collapsed, onToggle, isMobile }: { collapsed: boolean;
     <aside className={cn("flex flex-col bg-slate-900 border-r border-slate-800 transition-all duration-200 shrink-0",
       collapsed ? "w-[72px]" : "w-[260px]")}>
       <div className={cn("flex items-center h-16 px-4 border-b border-slate-800 shrink-0", collapsed && "justify-center px-2")}>
-        <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-primary shrink-0">
-          <span className="text-white font-bold text-sm">B</span>
+        {/* Original client logo on a light chip so it stays legible against the dark sidebar background */}
+        <div className={cn("flex items-center justify-center rounded-md bg-white/95 px-2 py-1", collapsed ? "h-9 w-9" : "h-10")}>
+          <Logo heightClassName="h-6" className={collapsed ? "max-w-[28px]" : undefined} />
         </div>
-        {!collapsed && <span className="ml-3 font-semibold text-white truncate">{APP_NAME}</span>}
       </div>
 
       <nav className="flex-1 overflow-y-auto p-2 space-y-4">

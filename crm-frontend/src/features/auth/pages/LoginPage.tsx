@@ -8,7 +8,7 @@ import { useAuth } from '../hooks/useAuth'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { FormField } from '@/components/ui/FormField'
-import { APP_NAME } from '@/config/constants'
+import { Logo } from '@/components/app/Logo'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -31,10 +31,7 @@ export default function LoginPage() {
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center h-12 w-12 rounded-xl bg-blue-600 mb-4">
-            <span className="text-white font-bold text-xl">B</span>
-          </div>
-          <h1 className="text-2xl font-semibold text-slate-900">{APP_NAME}</h1>
+          <Logo heightClassName="h-12" className="mx-auto mb-4" />
           <p className="mt-1 text-sm text-slate-500">Sign in to your account</p>
         </div>
         <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-6">

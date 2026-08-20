@@ -180,9 +180,9 @@ export default function BookingDetailPage() {
               <InfoRow label="Total"
                 value={formatCurrency(chargesTotal, primaryCurrencyCode)} />
               <InfoRow label="Currency"     value={primaryCurrencyCode} />
-              <InfoRow label="Travel Date"  value={firstSegment ? formatDate(firstSegment.departureAt) : "—"} />
+              <InfoRow label="Travel Date"  value={firstSegment?.departureAt ? formatDate(firstSegment.departureAt) : "—"} />
               <InfoRow label="Return"
-                value={returnSegment ? formatDate(returnSegment.departureAt) : "One-way"} />
+                value={returnSegment?.departureAt ? formatDate(returnSegment.departureAt) : "One-way"} />
               <InfoRow label="Created"      value={formatDateTime(booking.createdAt)} />
             </div>
           </div>
@@ -253,13 +253,31 @@ export default function BookingDetailPage() {
             <div className="space-y-3">
               {(booking.segments ?? []).map(s => (
                 <div key={s.id} className="grid grid-cols-2 sm:grid-cols-3 gap-4 pb-3 border-b border-slate-100 last:border-0 last:pb-0">
-                  <InfoRow label={s.direction === "OUTBOUND" ? "Outbound" : "Return"}
-                    value={s.airline ? `${s.airline.airlineName} (${s.airline.iataCode}) ${s.flightNumber}` : s.flightNumber} />
-                  <InfoRow label="Route" value={`${s.fromText} → ${s.toText}`} />
-                  <InfoRow label="Class" value={s.class ? `${s.class.name} (${s.class.code})` : "—"} />
-                  <InfoRow label="Departure" value={formatDateTime(s.departureAt)} />
-                  <InfoRow label="Arrival" value={formatDateTime(s.arrivalAt)} />
-                  <InfoRow label="PNR/Confirmation" value={s.pnrConfirmation} />
+                  {s.itineraryType === "IMAGE" ? (
+                    <>
+                      <InfoRow label={s.direction === "OUTBOUND" ? "Outbound" : "Return"} value="Itinerary provided as image" />
+                      <InfoRow label="Departure" value={formatDateTime(s.departureAt)} />
+                      <InfoRow label="Arrival" value={formatDateTime(s.arrivalAt)} />
+                      <div className="col-span-2 sm:col-span-3 flex flex-wrap gap-2">
+                        {s.imageUrls.map((url, i) => (
+                          <a key={i} href={url} target="_blank" rel="noreferrer"
+                            className="text-xs text-blue-600 underline break-all">
+                            Itinerary image {i + 1}
+                          </a>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <InfoRow label={s.direction === "OUTBOUND" ? "Outbound" : "Return"}
+                        value={s.airline ? `${s.airline.airlineName} (${s.airline.iataCode}) ${s.flightNumber}` : s.flightNumber} />
+                      <InfoRow label="Route" value={`${s.fromText} → ${s.toText}`} />
+                      <InfoRow label="Class" value={s.class ? `${s.class.name} (${s.class.code})` : "—"} />
+                      <InfoRow label="Departure" value={formatDateTime(s.departureAt)} />
+                      <InfoRow label="Arrival" value={formatDateTime(s.arrivalAt)} />
+                      <InfoRow label="PNR/Confirmation" value={s.pnrConfirmation} />
+                    </>
+                  )}
                 </div>
               ))}
               {!booking.segments?.length && <p className="text-sm text-slate-400">No itinerary on file.</p>}

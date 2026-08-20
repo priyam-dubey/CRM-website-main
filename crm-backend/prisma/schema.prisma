@@ -211,6 +211,14 @@ enum ItineraryDirection {
   RETURN
 }
 
+// Text Data = structured flight fields (existing behaviour). Image Data =
+// itinerary supplied as an uploaded image instead, per the client's
+// original CRM screenshots.
+enum ItineraryDataType {
+  TEXT
+  IMAGE
+}
+
 // Booking is now the top-level transaction record in the client's original
 // CRM sense (BID-numbered), not a single-flight/single-passenger row. Flight,
 // passenger, charge, and billing data all moved to dedicated child models —
@@ -304,24 +312,36 @@ model Charge {
 // using the same shape). from/to are free-text as shown in the screenshots
 // (e.g. "INDIA" / "USA") rather than an airport-code lookup, since no airport
 // model/dropdown is evidenced anywhere in the screenshots.
+//
+// itineraryType additive change (2026-08-17): the client's original CRM
+// offers an "Itinerary Details" mode toggle — Text Data (the structured
+// flight fields below) vs Image Data (the itinerary is supplied as an
+// uploaded image instead of being typed in). In Image Data mode none of the
+// structured flight fields apply, so airlineId/flightNumber/fromText/toText/
+// classId/departureAt/arrivalAt are nullable; imageUrls holds the uploaded
+// itinerary image reference(s) for that mode. Existing rows are backfilled
+// to itineraryType = TEXT, so this is purely additive — no existing data is
+// changed or removed.
 model ItinerarySegment {
   id              String             @id @default(uuid())
   bookingId       String
   direction       ItineraryDirection @default(OUTBOUND)
   segmentNumber   Int
-  airlineId       String
-  flightNumber    String             @db.VarChar(20)
-  fromText        String             @db.VarChar(100)
-  toText          String             @db.VarChar(100)
-  departureAt     DateTime
-  arrivalAt       DateTime
-  classId         String
+  itineraryType   ItineraryDataType  @default(TEXT)
+  airlineId       String?
+  flightNumber    String?            @db.VarChar(20)
+  fromText        String?            @db.VarChar(100)
+  toText          String?            @db.VarChar(100)
+  departureAt     DateTime?
+  arrivalAt       DateTime?
+  classId         String?
   pnrConfirmation String?            @db.VarChar(30)
+  imageUrls       String[]           @default([])
   createdAt       DateTime           @default(now())
 
   booking Booking      @relation(fields: [bookingId], references: [id])
-  airline Airline      @relation(fields: [airlineId], references: [id])
-  class   BookingClass @relation(fields: [classId], references: [id])
+  airline Airline?     @relation(fields: [airlineId], references: [id])
+  class   BookingClass? @relation(fields: [classId], references: [id])
 
   @@index([bookingId])
   @@map("itinerary_segments")

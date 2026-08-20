@@ -17,6 +17,7 @@ export enum TransactionType  { NEW_BOOKING = 'NEW_BOOKING', CANCEL_FOR_REFUND = 
 export enum TransactionStatus { DRAFT = 'DRAFT', IN_PROGRESS = 'IN_PROGRESS', COMPLETED = 'COMPLETED', CANCELLED = 'CANCELLED' }
 export enum PassengerType     { ADULT = 'ADULT', CHILD = 'CHILD', INFANT_ON_SEAT = 'INFANT_ON_SEAT', INFANT_ON_LAP = 'INFANT_ON_LAP' }
 export enum ItineraryDirection { OUTBOUND = 'OUTBOUND', RETURN = 'RETURN' }
+export enum ItineraryDataType  { TEXT = 'TEXT', IMAGE = 'IMAGE' }
 
 // Minimal Prisma namespace shim for where/orderBy/create/update input types
 export namespace Prisma {

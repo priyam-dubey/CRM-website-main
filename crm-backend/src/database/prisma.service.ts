@@ -83,7 +83,7 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get billingDetail() { return this.client.billingDetail }
   get attachment() { return this.client.attachment }
 
-  $transaction(arg: any) { return this.client.$transaction(arg) }
+  $transaction(arg: any, options?: any) { return this.client.$transaction(arg, options) }
   $use(fn: any) { return this.client.$use?.(fn) }
   $queryRaw<T = unknown>(strings: TemplateStringsArray, ...values: unknown[]): Promise<T> { return this.client.$queryRaw(strings, ...values) }
 
@@ -97,7 +97,7 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     })
     return {
       $connect: noop, $disconnect: noop,
-      $transaction: async (fn: any) => typeof fn === "function" ? fn(this) : Promise.all(fn),
+      $transaction: async (fn: any, _options?: any) => typeof fn === "function" ? fn(this) : Promise.all(fn),
       $queryRaw: () => Promise.resolve([]),
       user: model(), company: model(), session: model(), booking: model(),
       revenue: model(), mCO: model(), chargeback: model(), refund: model(),

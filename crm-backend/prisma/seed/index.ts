@@ -196,10 +196,18 @@ async function main() {
   }
   const processors = await prisma.cardProcessor.findMany({ where: { name: { in: processorSeeds.map(p => p.name) }, companyId: null } }) as Array<{ id: string }>
 
-  const callQueue = await prisma.callQueue.upsert({
-    where: { id: "00000000-0000-0000-0000-000000000001" },
-    update: {},
-    create: { id: "00000000-0000-0000-0000-000000000001", companyId: company.id, name: "General Enquiries", phone: "9878967879", isActive: true },
+  // NOTE: previously hardcoded as id: "00000000-0000-0000-0000-000000000001",
+  // which is UUID-shaped but not a valid RFC4122 UUID (version/variant
+  // nibbles are both 0) — that's why the pre-existing backend validators for
+  // callQueueId now use a permissive UUID-shape check instead of strict
+  // IsUUID(). For any *fresh* database this upserts by name and lets Prisma
+  // generate a real uuid() default, so newly seeded environments don't
+  // reproduce the malformed id. Existing databases already seeded with the
+  // old id are unaffected by this change — their row simply keeps its
+  // current id.
+  const existingCallQueue = await prisma.callQueue.findFirst({ where: { companyId: company.id, name: "General Enquiries" } })
+  const callQueue = existingCallQueue ?? await prisma.callQueue.create({
+    data: { companyId: company.id, name: "General Enquiries", phone: "9878967879", isActive: true },
   })
 
   console.log("Reference data ready:", {

@@ -64,6 +64,13 @@ export default function BookingFormPage() {
   const [segments, setSegments] = useState<(ItinerarySegmentInput & { id: string })[]>([
     { id: nextId(), direction: "OUTBOUND", segmentNumber: 1, airlineId: "", flightNumber: "", fromText: "", toText: "", departureAt: "", arrivalAt: "", classId: "", pnrConfirmation: "" },
   ])
+  // "Itinerary Details" mode toggle (client's original CRM: Text Data vs
+  // Image Data). Text Data uses the structured `segments` above unchanged;
+  // Image Data uses a single departure/arrival + uploaded image set instead.
+  const [itineraryType, setItineraryType] = useState<"TEXT" | "IMAGE">("TEXT")
+  const [itineraryImageData, setItineraryImageData] = useState<{ departureAt: string; arrivalAt: string; imageUrls: string[] }>({
+    departureAt: "", arrivalAt: "", imageUrls: [],
+  })
   const [passengers, setPassengers] = useState<(PassengerInput & { id: string })[]>([
     { id: nextId(), passengerNumber: 1, type: "ADULT", firstName: "", middleName: "", lastName: "", dob: "", ticketNumber: "" },
   ])
@@ -90,14 +97,18 @@ export default function BookingFormPage() {
       if (!pnr.trim()) errs.push("Reservation confirmation number is required.")
     }
     if (key === "itinerary") {
-      if (!segments.length) errs.push("Add at least one flight.")
-      segments.forEach((s, i) => {
-        if (!s.airlineId) errs.push(`Flight #${i + 1}: airline is required.`)
-        if (!s.flightNumber?.trim()) errs.push(`Flight #${i + 1}: flight number is required.`)
-        if (!s.fromText?.trim() || !s.toText?.trim()) errs.push(`Flight #${i + 1}: From and To are required.`)
-        if (!s.departureAt || !s.arrivalAt) errs.push(`Flight #${i + 1}: departure and arrival are required.`)
-        if (!s.classId) errs.push(`Flight #${i + 1}: class is required.`)
-      })
+      if (itineraryType === "IMAGE") {
+        if (!itineraryImageData.imageUrls.length) errs.push("At least one itinerary image is required when using Image Data type.")
+      } else {
+        if (!segments.length) errs.push("Add at least one flight.")
+        segments.forEach((s, i) => {
+          if (!s.airlineId) errs.push(`Flight #${i + 1}: airline is required.`)
+          if (!s.flightNumber?.trim()) errs.push(`Flight #${i + 1}: flight number is required.`)
+          if (!s.fromText?.trim() || !s.toText?.trim()) errs.push(`Flight #${i + 1}: From and To are required.`)
+          if (!s.departureAt || !s.arrivalAt) errs.push(`Flight #${i + 1}: departure and arrival are required.`)
+          if (!s.classId) errs.push(`Flight #${i + 1}: class is required.`)
+        })
+      }
     }
     if (key === "passengers") {
       if (!passengers.length) errs.push("Add at least one passenger.")
@@ -144,8 +155,19 @@ export default function BookingFormPage() {
     const payload: CreateBookingInput = {
       providerId, callQueueId: callQueueId || undefined, customerEmail,
       pnr: pnr || undefined, transactionType,
-      charges: charges.map(({ id, ...c }) => c),
-      segments: segments.map(({ id, ...s }) => ({ ...s, pnrConfirmation: s.pnrConfirmation || undefined })),
+      // Amount is entered in the charge's major currency unit (e.g. dollars,
+      // matching normal numeric-input behaviour — see BookingFormPage's
+      // Amount field). The backend/DB store minor units (cents, an Int), so
+      // convert at the submission boundary only.
+      charges: charges.map(({ id, amount, ...c }) => ({ ...c, amount: Math.round(amount * 100) })),
+      segments: itineraryType === "IMAGE"
+        ? [{
+            direction: "OUTBOUND", segmentNumber: 1, itineraryType: "IMAGE",
+            departureAt: itineraryImageData.departureAt || undefined,
+            arrivalAt: itineraryImageData.arrivalAt || undefined,
+            imageUrls: itineraryImageData.imageUrls,
+          }]
+        : segments.map(({ id, ...s }) => ({ ...s, itineraryType: "TEXT", pnrConfirmation: s.pnrConfirmation || undefined })),
       passengers: passengers.map(({ id, ...p }) => ({
         ...p, middleName: p.middleName || undefined, dob: p.dob || undefined, ticketNumber: p.ticketNumber || undefined,
       })),
@@ -275,7 +297,7 @@ export default function BookingFormPage() {
                 {charges.map((c, i) => (
                   <div key={c.id} className="grid grid-cols-[1fr_140px_1fr_auto] gap-3 items-end">
                     <FormField label={i === 0 ? "Amount" : undefined}>
-                      <Input type="number" min="0" step="0.01" value={c.amount || ""} onChange={e => setCharges(cs => cs.map(x => x.id === c.id ? { ...x, amount: Math.round(Number(e.target.value) * 100) } : x))} />
+                      <Input type="number" min="0" step="0.01" value={c.amount || ""} onChange={e => { const v = e.target.value; setCharges(cs => cs.map(x => x.id === c.id ? { ...x, amount: v === "" ? 0 : Number(v) } : x)) }} />
                     </FormField>
                     <FormField label={i === 0 ? "Currency" : undefined}>
                       <Select value={c.currencyId} onValueChange={v => setCharges(cs => cs.map(x => x.id === c.id ? { ...x, currencyId: v } : x))}>
@@ -304,19 +326,69 @@ export default function BookingFormPage() {
                 <p className="text-xs text-slate-500 bg-slate-50 rounded-md p-3">
                   Dear {passengers[0]?.firstName || "Customer"}, thank you for contacting us! As per our conversation and as agreed,
                   we have booked your reservation under Confirmation number <b>{pnr || "—"}</b> with a charge of{" "}
-                  <b>{(totalAmount / 100).toFixed(2)} {totalCurrency?.code ?? ""}</b> (Including all taxes and fees) as per the description.
+                  <b>{totalAmount.toFixed(2)} {totalCurrency?.code ?? ""}</b> (Including all taxes and fees) as per the description.
                 </p>
               </div>
             )}
 
             {section === "itinerary" && (
               <div className="space-y-4">
-                <div className="flex justify-end">
-                  <Button size="sm" variant="outline" leftIcon={<Plus className="h-3.5 w-3.5" />}
-                    onClick={() => setSegments(s => [...s, { id: nextId(), direction: "OUTBOUND", segmentNumber: s.length + 1, airlineId: "", flightNumber: "", fromText: "", toText: "", departureAt: "", arrivalAt: "", classId: "", pnrConfirmation: "" }])}>
-                    Add Flight
-                  </Button>
+                <div className="flex items-center justify-between">
+                  <FormField label="Itinerary Details" className="w-56">
+                    <Select value={itineraryType} onValueChange={v => setItineraryType(v as "TEXT" | "IMAGE")}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="TEXT">Text Data</SelectItem>
+                        <SelectItem value="IMAGE">Image Data</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FormField>
+                  {itineraryType === "TEXT" && (
+                    <Button size="sm" variant="outline" leftIcon={<Plus className="h-3.5 w-3.5" />}
+                      onClick={() => setSegments(s => [...s, { id: nextId(), direction: "OUTBOUND", segmentNumber: s.length + 1, airlineId: "", flightNumber: "", fromText: "", toText: "", departureAt: "", arrivalAt: "", classId: "", pnrConfirmation: "" }])}>
+                      Add Flight
+                    </Button>
+                  )}
                 </div>
+
+                {itineraryType === "IMAGE" ? (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <FormField label="Departure">
+                        <Input type="datetime-local" value={itineraryImageData.departureAt}
+                          onChange={e => setItineraryImageData(d => ({ ...d, departureAt: e.target.value }))} />
+                      </FormField>
+                      <FormField label="Arrival">
+                        <Input type="datetime-local" value={itineraryImageData.arrivalAt}
+                          onChange={e => setItineraryImageData(d => ({ ...d, arrivalAt: e.target.value }))} />
+                      </FormField>
+                    </div>
+                    <FormField label="Itinerary Images" required>
+                      <div
+                        className="border-2 border-dashed border-slate-200 rounded-md p-10 text-center text-sm text-slate-400 cursor-pointer hover:border-slate-300"
+                        onClick={() => {
+                          const url = window.prompt("Itinerary image URL (upload storage isn't wired up yet — paste a URL)")
+                          if (url) setItineraryImageData(d => ({ ...d, imageUrls: [...d.imageUrls, url] }))
+                        }}
+                      >
+                        Drag and drop, click to select, or paste images here
+                      </div>
+                      {!itineraryImageData.imageUrls.length ? (
+                        <p className="mt-2 text-xs text-red-500">Required — Please upload at least one image</p>
+                      ) : (
+                        <ul className="mt-3 space-y-1 text-sm text-slate-600">
+                          {itineraryImageData.imageUrls.map((url, i) => (
+                            <li key={i} className="flex items-center justify-between">
+                              {url}
+                              <button onClick={() => setItineraryImageData(d => ({ ...d, imageUrls: d.imageUrls.filter((_, idx) => idx !== i) }))} className="text-red-500 text-xs">Remove</button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </FormField>
+                  </div>
+                ) : (
+                <>
                 {segments.map(s => (
                   <div key={s.id} className="border border-slate-200 rounded-md p-4 space-y-3">
                     <div className="flex items-center justify-between">
@@ -331,14 +403,14 @@ export default function BookingFormPage() {
                       )}
                     </div>
                     <div className="grid grid-cols-2 gap-3">
-                      <FormField label="Airline"><AirlineSelect value={s.airlineId} onChange={v => setSegments(ss => ss.map(x => x.id === s.id ? { ...x, airlineId: v } : x))} /></FormField>
-                      <FormField label="Flight Number"><Input value={s.flightNumber} onChange={e => setSegments(ss => ss.map(x => x.id === s.id ? { ...x, flightNumber: e.target.value } : x))} /></FormField>
-                      <FormField label="From"><Input value={s.fromText} onChange={e => setSegments(ss => ss.map(x => x.id === s.id ? { ...x, fromText: e.target.value } : x))} /></FormField>
-                      <FormField label="To"><Input value={s.toText} onChange={e => setSegments(ss => ss.map(x => x.id === s.id ? { ...x, toText: e.target.value } : x))} /></FormField>
-                      <FormField label="Departure"><Input type="datetime-local" value={s.departureAt} onChange={e => setSegments(ss => ss.map(x => x.id === s.id ? { ...x, departureAt: e.target.value } : x))} /></FormField>
-                      <FormField label="Arrival"><Input type="datetime-local" value={s.arrivalAt} onChange={e => setSegments(ss => ss.map(x => x.id === s.id ? { ...x, arrivalAt: e.target.value } : x))} /></FormField>
+                      <FormField label="Airline"><AirlineSelect value={s.airlineId ?? ""} onChange={v => setSegments(ss => ss.map(x => x.id === s.id ? { ...x, airlineId: v } : x))} /></FormField>
+                      <FormField label="Flight Number"><Input value={s.flightNumber ?? ""} onChange={e => setSegments(ss => ss.map(x => x.id === s.id ? { ...x, flightNumber: e.target.value } : x))} /></FormField>
+                      <FormField label="From"><Input value={s.fromText ?? ""} onChange={e => setSegments(ss => ss.map(x => x.id === s.id ? { ...x, fromText: e.target.value } : x))} /></FormField>
+                      <FormField label="To"><Input value={s.toText ?? ""} onChange={e => setSegments(ss => ss.map(x => x.id === s.id ? { ...x, toText: e.target.value } : x))} /></FormField>
+                      <FormField label="Departure"><Input type="datetime-local" value={s.departureAt ?? ""} onChange={e => setSegments(ss => ss.map(x => x.id === s.id ? { ...x, departureAt: e.target.value } : x))} /></FormField>
+                      <FormField label="Arrival"><Input type="datetime-local" value={s.arrivalAt ?? ""} onChange={e => setSegments(ss => ss.map(x => x.id === s.id ? { ...x, arrivalAt: e.target.value } : x))} /></FormField>
                       <FormField label="Class">
-                        <Select value={s.classId} onValueChange={v => setSegments(ss => ss.map(x => x.id === s.id ? { ...x, classId: v } : x))}>
+                        <Select value={s.classId ?? ""} onValueChange={v => setSegments(ss => ss.map(x => x.id === s.id ? { ...x, classId: v } : x))}>
                           <SelectTrigger><SelectValue placeholder="Select class" /></SelectTrigger>
                           <SelectContent>{classes.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
                         </Select>
@@ -347,6 +419,8 @@ export default function BookingFormPage() {
                     </div>
                   </div>
                 ))}
+                </>
+                )}
               </div>
             )}
 

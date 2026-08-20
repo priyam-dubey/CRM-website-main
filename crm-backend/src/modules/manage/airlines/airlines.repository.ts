@@ -10,20 +10,31 @@ export class AirlinesRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async findMany(companyId: string, filters: AirlineFiltersDto) {
-    const where: any = {
-      OR: [{ companyId }, { companyId: null }],
-      deletedAt: null,
-      ...(filters.isActive !== undefined ? { isActive: filters.isActive } : {}),
-      ...(filters.country ? { country: { contains: filters.country, mode: "insensitive" } } : {}),
-      ...(filters.search ? {
+    // NOTE: the previous version put the tenant-scope OR and the search OR
+    // as two separate keys named "OR" inside the same object literal. In a
+    // JS object literal, a later duplicate key silently overwrites an
+    // earlier one — so whenever `search` was provided, the tenant-scope
+    // `OR: [{ companyId }, { companyId: null }]` was clobbered by the
+    // search `OR`, and vice versa depending on ordering. All conditions are
+    // combined explicitly with AND below so each filter (tenant scope,
+    // deletedAt, isActive, country, search) is always applied together.
+    const andConditions: any[] = [
+      { OR: [{ companyId }, { companyId: null }] },
+      { deletedAt: null },
+    ]
+    if (filters.isActive !== undefined) andConditions.push({ isActive: filters.isActive })
+    if (filters.country) andConditions.push({ country: { contains: filters.country, mode: "insensitive" } })
+    if (filters.search) {
+      andConditions.push({
         OR: [
           { airlineName: { contains: filters.search, mode: "insensitive" } },
           { iataCode:    { contains: filters.search, mode: "insensitive" } },
           { icaoCode:    { contains: filters.search, mode: "insensitive" } },
           { country:     { contains: filters.search, mode: "insensitive" } },
         ],
-      } : {}),
+      })
     }
+    const where: any = { AND: andConditions }
 
     const orderBy: any = filters.sort_by
       ? { [filters.sort_by]: filters.sort_dir ?? "asc" }

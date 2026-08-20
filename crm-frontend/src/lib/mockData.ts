@@ -110,10 +110,10 @@ export const MOCK_BOOKINGS: Booking[] = Array.from({ length: 80 }, (_, i) => {
     provider: prov, createdBy: MOCK_USERS[0], assignedTo: user,
     passengers: [{ id: `pax-${id}`, passengerNumber: 1, type: 'ADULT' as const, firstName, middleName: null, lastName: rest.join(' ') || '-', dob: null, ticketNumber: null }],
     segments: [{
-      id: `seg-${id}`, direction: 'OUTBOUND' as const, segmentNumber: 1, airlineId: airline.id,
+      id: `seg-${id}`, direction: 'OUTBOUND' as const, segmentNumber: 1, itineraryType: 'TEXT' as const, airlineId: airline.id,
       flightNumber: String(1000 + i), fromText: 'USA', toText: 'INDIA',
       departureAt: travel.toISOString(), arrivalAt: new Date(travel.getTime() + 8*3600000).toISOString(),
-      classId: cls.id, pnrConfirmation: null, airline, class: cls,
+      classId: cls.id, pnrConfirmation: null, imageUrls: [], airline, class: cls,
     }],
     charges: [{ id: `chg-${id}`, chargeNumber: 1, amount: grossAmount, currencyId: cur.id, description: null, currency: cur }],
   }

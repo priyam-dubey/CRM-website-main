@@ -49,10 +49,16 @@ export interface Charge {
   currency?: { id: string; code: string; symbol: string; decimalPlaces: number }
 }
 
+export type ItineraryDataType = "TEXT" | "IMAGE"
+
 export interface ItinerarySegment {
-  id: string; direction: ItineraryDirection; segmentNumber: number; airlineId: string
-  flightNumber: string; fromText: string; toText: string; departureAt: string; arrivalAt: string
-  classId: string; pnrConfirmation: string | null
+  id: string; direction: ItineraryDirection; segmentNumber: number
+  itineraryType: ItineraryDataType
+  airlineId: string | null
+  flightNumber: string | null; fromText: string | null; toText: string | null
+  departureAt: string | null; arrivalAt: string | null
+  classId: string | null; pnrConfirmation: string | null
+  imageUrls: string[]
   airline?: { id: string; airlineName: string; iataCode: string }
   class?: { id: string; name: string; code: string }
 }
@@ -104,8 +110,16 @@ export interface BookingFilters {
 // ── Create Booking wizard input shapes — mirror the backend DTOs exactly ──
 export interface ChargeInput { chargeNumber: number; amount: number; currencyId: string; description?: string }
 export interface ItinerarySegmentInput {
-  direction?: ItineraryDirection; segmentNumber: number; airlineId: string; flightNumber: string
-  fromText: string; toText: string; departureAt: string; arrivalAt: string; classId: string; pnrConfirmation?: string
+  direction?: ItineraryDirection; segmentNumber: number
+  itineraryType?: ItineraryDataType
+  // Text Data mode fields (unused/omitted for Image Data mode)
+  airlineId?: string; flightNumber?: string
+  fromText?: string; toText?: string; classId?: string
+  // Shared: required for Text Data, optional for Image Data
+  departureAt?: string; arrivalAt?: string
+  pnrConfirmation?: string
+  // Image Data mode field (at least one required when itineraryType is IMAGE)
+  imageUrls?: string[]
 }
 export interface PassengerInput {
   passengerNumber: number; type: PassengerType; firstName: string; middleName?: string; lastName: string

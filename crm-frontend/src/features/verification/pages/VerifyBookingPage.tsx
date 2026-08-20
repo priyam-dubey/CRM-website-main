@@ -4,7 +4,7 @@ import axios from "axios"
 import { Button } from "@/components/ui/Button"
 import { useResolveVerificationToken, useSubmitVerification } from "../hooks/useBookingVerification"
 import { getErrorMessage } from "@/lib/api-client"
-import { APP_NAME } from "@/config/constants"
+import { Logo } from "@/components/app/Logo"
 
 // Deliberately minimal: the client's own "Itinerary Authorization" email
 // already contains the full passenger/flight/card/charges review — this
@@ -18,10 +18,7 @@ function PageShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-slate-50 flex items-start justify-center p-4 py-16">
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center h-12 w-12 rounded-xl bg-blue-600 mb-3">
-            <span className="text-white font-bold text-xl">B</span>
-          </div>
-          <h1 className="text-xl font-semibold text-slate-900">{APP_NAME}</h1>
+          <Logo heightClassName="h-10" className="mx-auto" />
         </div>
         {children}
       </div>

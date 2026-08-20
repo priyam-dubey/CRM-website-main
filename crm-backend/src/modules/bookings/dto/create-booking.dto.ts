@@ -1,6 +1,7 @@
-import { IsString, IsUUID, IsOptional, MaxLength, IsIn, IsBoolean, IsEmail, ValidateNested, ArrayMinSize, IsObject } from "class-validator"
+import { IsString, IsUUID, IsOptional, MaxLength, IsIn, IsBoolean, IsEmail, ValidateNested, ArrayMinSize, IsObject, Matches } from "class-validator"
 import { Type } from "class-transformer"
 import { BookingStatus, TransactionType } from "../../../shared/types/prisma.types"
+import { UUID_SHAPE_REGEX } from "../../../shared/validators/uuid-shape"
 import { ChargeInputDto } from "./charge-input.dto"
 import { ItinerarySegmentInputDto } from "./itinerary-segment-input.dto"
 import { PassengerInputDto } from "./passenger-input.dto"
@@ -11,7 +12,9 @@ export class CreateBookingDto {
   @IsUUID()
   providerId: string
 
-  @IsOptional() @IsUUID()
+  // Uses a permissive UUID-shape check rather than strict @IsUUID() — see
+  // shared/validators/uuid-shape.ts for why.
+  @IsOptional() @Matches(UUID_SHAPE_REGEX, { message: "callQueueId must be a UUID" })
   callQueueId?: string
 
   // Entered in the "Create New Transaction" pre-wizard step; the

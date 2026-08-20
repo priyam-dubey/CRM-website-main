@@ -22,7 +22,8 @@ export function formatDate(date: string | Date, fmt = 'MMM d, yyyy'): string {
   return format(d, fmt)
 }
 
-export function formatDateTime(date: string | Date): string {
+export function formatDateTime(date: string | Date | null): string {
+  if (!date) return "—"
   return format(typeof date === 'string' ? parseISO(date) : date, 'MMM d, yyyy HH:mm')
 }
 

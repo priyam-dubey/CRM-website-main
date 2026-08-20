@@ -65,9 +65,16 @@ export class BookingsService {
       await tx.itinerarySegment.createMany({
         data: dto.segments.map(s => ({
           bookingId: b.id, direction: s.direction ?? "OUTBOUND", segmentNumber: s.segmentNumber,
-          airlineId: s.airlineId, flightNumber: s.flightNumber, fromText: s.fromText, toText: s.toText,
-          departureAt: new Date(s.departureAt), arrivalAt: new Date(s.arrivalAt),
-          classId: s.classId, pnrConfirmation: s.pnrConfirmation,
+          itineraryType: s.itineraryType ?? "TEXT",
+          // Text Data: structured flight fields as before. Image Data: these
+          // are all absent on the DTO (validated in ItinerarySegmentInputDto),
+          // so they're stored as null and imageUrls carries the upload(s).
+          airlineId: s.airlineId ?? null, flightNumber: s.flightNumber ?? null,
+          fromText: s.fromText ?? null, toText: s.toText ?? null,
+          departureAt: s.departureAt ? new Date(s.departureAt) : null,
+          arrivalAt: s.arrivalAt ? new Date(s.arrivalAt) : null,
+          classId: s.classId ?? null, pnrConfirmation: s.pnrConfirmation,
+          imageUrls: s.imageUrls ?? [],
         })),
       })
 
@@ -139,6 +146,19 @@ export class BookingsService {
       })
 
       return b
+    }, {
+      // Default Prisma interactive-transaction timeout is 5000ms. This
+      // transaction makes ~15-20 sequential round-trip queries (booking,
+      // charges, segments, passengers, billing, revenue-per-charge,
+      // transaction record, activity log) — against a local Postgres that's
+      // comfortably under 5s, but against a remote/serverless DB (e.g. Neon)
+      // with real network latency per round trip it can exceed the default
+      // and Prisma aborts the whole transaction ("Transaction already
+      // closed... expired"). Raised here rather than lowering the number of
+      // queries, since splitting booking creation into multiple non-atomic
+      // writes would risk partially-created bookings on failure.
+      timeout: 20_000,
+      maxWait: 10_000,
     })
 
     this.eventEmitter.emit(EVENTS.BOOKING_CREATED, { booking, actor })
